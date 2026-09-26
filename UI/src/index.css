@@ -1,0 +1,153 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-deep: #07090e;
+  --bg-card: rgba(15, 20, 31, 0.72);
+  --bg-subtle: #0d121d;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-active: rgba(59, 130, 246, 0.4);
+  --accent-cyan: #06b6d4;
+  --accent-blue: #3b82f6;
+  --accent-emerald: #10b981;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-deep);
+  color: #f1f5f9;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.15), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 80%, rgba(6, 182, 212, 0.08), transparent);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+code, .font-mono {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Glassmorphism Surface with Border Gradient */
+.premium-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Modern Metric Glow Card */
+.metric-tile {
+  background: linear-gradient(180deg, rgba(20, 27, 43, 0.6) 0%, rgba(13, 18, 29, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), transparent);
+}
+
+/* Institutional Form Fields */
+.input-field {
+  width: 100%;
+  background: rgba(10, 14, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #ffffff;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input-field:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  background: rgba(10, 14, 23, 0.95);
+}
+
+/* High-Performance Action Buttons */
+.btn-primary-gradient {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0284c7 100%);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 12px 20px;
+  box-shadow: 0 4px 20px -2px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary-gradient:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px -2px rgba(37, 99, 235, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary-gradient:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Institutional Data Tables */
+.fintech-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.fintech-table th {
+  background: rgba(13, 18, 29, 0.9);
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fintech-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.fintech-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
