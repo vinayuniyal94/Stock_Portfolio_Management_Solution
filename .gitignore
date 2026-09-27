@@ -1,0 +1,14 @@
+# Ignore Node.js / React build artifacts and dependencies
+**/node_modules/
+node_modules/
+UI/node_modules/
+UI/build/
+
+# Ignore Python virtual environment and cache
+venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Ignore sensitive credentials
+.env

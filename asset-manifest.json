@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/Stock_Portfolio_Management_Solution/static/css/main.f15705e2.css",
+    "main.js": "/Stock_Portfolio_Management_Solution/static/js/main.c340de1a.js",
+    "index.html": "/Stock_Portfolio_Management_Solution/index.html",
+    "main.f15705e2.css.map": "/Stock_Portfolio_Management_Solution/static/css/main.f15705e2.css.map",
+    "main.c340de1a.js.map": "/Stock_Portfolio_Management_Solution/static/js/main.c340de1a.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.f15705e2.css",
+    "static/js/main.c340de1a.js"
+  ]
+}
