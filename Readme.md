@@ -1,2 +1,2 @@
-Cammand to activate virtual env
-.\venv\Scripts\Activate.ps1
+# Stock_Portfolio_Management_Solution
+MultiAgentic Project on stock portfolio management solution

@@ -11,14 +11,24 @@ langchain>=0.1.14
 langchain-core>=0.1.40
 langchain-community>=0.0.30
 langchain-openai>=0.1.1
+langchain-text-splitters>=0.0.1
+langchain-huggingface>=0.0.3
 
-# Vector Database (RAG)
-pinecone-client>=3.2.0
+# Hugging Face LLM Inference & Observability Logging
+huggingface_hub>=0.23.0
+tiktoken>=0.7.0
+
+# Vector Database (Pinecone SDK)
+pinecone>=6.0.0
+
+# Document Processing & Embeddings
+pypdf>=4.1.0
+sentence-transformers>=2.6.0
 
 # Model Context Protocol (MCP)
 mcp>=1.0.0
 
-# Market Data
+# Market Data for Indian Stock Analysis (NSE/BSE)
 yfinance>=0.2.37
 
 # Additional Utilities
