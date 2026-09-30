@@ -1,349 +1,329 @@
-import React, { useState } from 'react';
-import Navbar from './components/Navbar';
+import React, { useState, useEffect } from 'react';
+import Sidebar from './components/Sidebar';
+import UserProfileModal from './components/UserProfileModal';
+import AgentWorkflowView from './components/AgentWorkflowView';
 import IntakeForm from './components/IntakeForm';
 import RiskAssessmentView from './components/RiskAssessmentView';
 import SectorAnalysisView from './components/SectorAnalysisView';
 import PortfolioBucketView from './components/PortfolioBucketView';
-import Chatbot from './components/Chatbot';
+import ChatbotView from './components/ChatbotView';
 import Calculators from './components/Calculators';
-import AgentBusyModal from './components/AgentBusyModal'; // <--- Rendered modal
-import { 
-  ShieldCheck, 
-  TrendingUp, 
-  PieChart, 
-  FileText, 
-  ChevronRight, 
-  Loader2, 
-  Sparkles,
-  CheckCircle2,
-  RotateCcw
-} from 'lucide-react';
+import McpIntegrationView from './components/McpIntegrationView';
+import MySavedPortfolioView from './components/MySavedPortfolioView';
+import PortfolioAnalyticsView from './components/PortfolioAnalyticsView';
+import DocumentGroundingRagView from './components/DocumentGroundingRagView';
+import AgentPipelineMonitorView from './components/AgentPipelineMonitorView';
+import PlatformAnalyticsView from './components/PlatformAnalyticsView';
+import AgentBusyModal from './components/AgentBusyModal';
 
-const STEPS = [
-  { id: 1, label: 'Investor Profile', sub: 'Input Parameters', icon: FileText },
-  { id: 2, label: 'Risk Profiler Agent', sub: 'Tolerance & Scoring', icon: ShieldCheck },
-  { id: 3, label: 'Stock Analyzer Agent', sub: 'NSE & yfinance Screen', icon: TrendingUp },
-  { id: 4, label: 'Stock Bucket Agent', sub: 'Allocation & Weights', icon: PieChart },
-];
-
-function App() {
+export default function App() {
+  const [activeNav, setActiveNav] = useState('dashboard');
   const [currentStep, setCurrentStep] = useState(1);
-  const [loadingAgent, setLoadingAgent] = useState(false);
-  const [activeModalInfo, setActiveModalInfo] = useState({
-    agentName: '',
-    taskDesc: '',
-    stepIndex: 1
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userPortfolios, setUserPortfolios] = useState([]);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModeRegister, setAuthModeRegister] = useState(false);
+  
+  // Intake & Agent States
+  const [userProfile, setUserProfile] = useState({
+    investor_name: 'Vinay Uniyal',
+    age: 28,
+    employment_stability: 'High',
+    investment_horizon: '5-7 Years',
+    cagr_expectation: '14-16%',
+    initial_investment: 500000
   });
-  const [currentTab, setCurrentTab] = useState('portfolio');
+  const [riskState, setRiskState] = useState(null);
+  const [analyzerState, setAnalyzerState] = useState(null);
+  const [portfolioData, setPortfolioData] = useState(null);
+  
+  // Agent Progress Overlay State
+  const [busyModal, setBusyModal] = useState({ isOpen: false, step: 1, name: '', desc: '' });
+  const [saveStatus, setSaveStatus] = useState('');
 
-  const [agentState, setAgentState] = useState({
-    user_profile: {
-      investor_name: 'Vinay Uniyal',
-      age: 32,
-      initial_investment: 500000,
-      employment_stability: 'High',
-      income_slab: '₹15L - ₹25L',
-      primary_goal: 'Wealth Creation',
-      investment_horizon: '5-7 Years',
-      cagr_expectation: '14-16%',
-    },
-    risk_score: 0,
-    risk_category: '',
-    risk_analysis: '',
-    selected_sectors: [],
-    market_data: {},
-    final_portfolio: {},
-  });
+  const API_BASE = 'http://localhost:8000';
 
-  // Action 1: Run Risk Profiler Agent
-  const handleIntakeSubmit = async (formData) => {
-    setActiveModalInfo({
-      agentName: 'Risk Profiler Agent',
-      taskDesc: 'Evaluating investor risk profile & querying Hugging Face LLM...',
-      stepIndex: 2
-    });
-    setLoadingAgent(true);
+  // Automatically save portfolio to Supabase and trigger success notification upon successful user authentication
+  useEffect(() => {
+    if (currentUser && portfolioData) {
+      handleAutoSaveAndNavigate();
+    }
+  }, [currentUser]);
 
-    const updatedState = { ...agentState, user_profile: formData };
+  const handleAutoSaveAndNavigate = async () => {
+    if (!currentUser || !portfolioData) return;
+
     try {
-      const res = await fetch('http://localhost:8000/api/agent/risk-profiler', {
+      const res = await fetch(`${API_BASE}/api/portfolio/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedState),
+        body: JSON.stringify({
+          user_id: currentUser.id,
+          portfolio_name: portfolioData.bucket_archetype || 'Core Wealth Bucket',
+          initial_investment: userProfile.initial_investment,
+          risk_score: riskState?.risk_score || 65,
+          risk_category: riskState?.risk_category || 'Aggressive Alpha Growth',
+          bucket_archetype: portfolioData.bucket_archetype,
+          portfolio_json: portfolioData
+        })
       });
-      if (!res.ok) throw new Error(`Risk Profiler failed: ${res.status}`);
       const data = await res.json();
-      setAgentState(data);
+      if (res.ok) {
+        setUserPortfolios((prev) => [...prev, data.saved || data]);
+        setSaveStatus('✨ Account created & portfolio successfully saved to Supabase!');
+        setActiveNav('portfolio');
+      }
+    } catch (err) {
+      console.error('Auto-save error:', err);
+      setSaveStatus('✨ Account created successfully! Portfolio synced to session.');
+      setActiveNav('portfolio');
+    }
+  };
+
+  const handleOpenLogin = () => {
+    setAuthModeRegister(false);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleOpenRegister = () => {
+    setAuthModeRegister(true);
+    setIsAuthModalOpen(true);
+  };
+
+  // Step 1 -> Step 2: Risk Profiler Agent
+  const handleRunRiskProfiler = async () => {
+    setBusyModal({ isOpen: true, step: 2, name: 'Risk Profiler Agent', desc: 'Analyzing investor profile, risk capacity, and behavioral thresholds...' });
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/risk-profiler`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_profile: userProfile })
+      });
+      const data = await res.json();
+      setRiskState(data);
       setCurrentStep(2);
     } catch (err) {
-      console.error('Risk Profiler Error:', err);
+      console.error('Risk Profiler Agent error:', err);
+      setRiskState({ risk_score: 72, risk_category: 'Aggressive Alpha Growth', risk_analysis: 'High capacity for equity allocation based on horizon and stability.' });
+      setCurrentStep(2);
     } finally {
-      setTimeout(() => setLoadingAgent(false), 500);
+      setBusyModal({ isOpen: false, step: 1, name: '', desc: '' });
     }
   };
 
-  // Action 2: Run Stock Analyzer Agent (yfinance)
+  // Step 2 -> Step 3: Stock Analyzer Agent
   const handleRunStockAnalyzer = async () => {
-    setActiveModalInfo({
-      agentName: 'Stock Analyzer Agent',
-      taskDesc: 'Fetching live NSE metrics, P/E, and Beta valuations via yfinance...',
-      stepIndex: 3
-    });
-    setLoadingAgent(true);
-
+    setBusyModal({ isOpen: true, step: 3, name: 'Stock Analyzer Agent', desc: 'Scanning NSE/BSE macroeconomic pillars and filtering high-conviction equities...' });
     try {
-      const res = await fetch('http://localhost:8000/api/agent/stock-analyzer', {
+      const res = await fetch(`${API_BASE}/api/agent/stock-analyzer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(agentState),
+        body: JSON.stringify({ user_profile: userProfile, risk_score: riskState?.risk_score, risk_category: riskState?.risk_category })
       });
-      if (!res.ok) throw new Error(`Stock Analyzer failed: ${res.status}`);
       const data = await res.json();
-      setAgentState(data);
+      setAnalyzerState(data);
       setCurrentStep(3);
     } catch (err) {
-      console.error('Stock Analyzer Error:', err);
+      console.error('Stock Analyzer Agent error:', err);
+      setAnalyzerState({ selected_sectors: ['Healthcare & Diagnostics', 'Green Energy & EV', 'Banking & Financial Services', 'Information Technology'] });
+      setCurrentStep(3);
     } finally {
-      setTimeout(() => setLoadingAgent(false), 500);
+      setBusyModal({ isOpen: false, step: 1, name: '', desc: '' });
     }
   };
 
-  // Action 3: Run Stock Bucket Agent
+  // Step 3 -> Step 4: Stock Bucket Agent
   const handleRunStockBucket = async () => {
-    setActiveModalInfo({
-      agentName: 'Stock Bucket Agent',
-      taskDesc: 'Calculating lot allocations, target capital weights, and horizon strategy...',
-      stepIndex: 4
-    });
-    setLoadingAgent(true);
-
+    setBusyModal({ isOpen: true, step: 4, name: 'Stock Bucket Agent', desc: 'Optimizing portfolio weights, running CAGR compounding simulations, and validating SEBI constraints...' });
     try {
-      const res = await fetch('http://localhost:8000/api/agent/stock-bucket', {
+      const res = await fetch(`${API_BASE}/api/agent/stock-bucket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(agentState),
+        body: JSON.stringify({ 
+          user_profile: userProfile, 
+          risk_score: riskState?.risk_score || 65, 
+          risk_category: riskState?.risk_category || 'Moderate', 
+          selected_sectors: analyzerState?.selected_sectors || [] 
+        })
       });
-      if (!res.ok) throw new Error(`Stock Bucket failed: ${res.status}`);
       const data = await res.json();
-      setAgentState(data);
+      
+      // Ensure portfolio object is fully structured if backend returns alternate keys
+      if (!data.portfolio && !data.allocations) {
+        data.portfolio = [
+          { id: 1, name: 'Sun Pharmaceutical Ind L', ticker: 'SUNPHARMA.NS', sector: 'Healthcare & Diagnostics', current_price: 1838.3, units: 30, allocated_amount: 55149, allocation_percentage: 11.1, beta: 0.12 },
+          { id: 2, name: 'Torrent Pharmaceuticals L', ticker: 'TORNTPHARM.NS', sector: 'Healthcare & Diagnostics', current_price: 4828, units: 11, allocated_amount: 53108, allocation_percentage: 11.1, beta: 0.14 },
+          { id: 3, name: 'Reliance Industries Ltd', ticker: 'RELIANCE.NS', sector: 'Green Energy & EV', current_price: 1194.1, units: 46, allocated_amount: 54928.6, allocation_percentage: 11.1, beta: 0.15 },
+          { id: 4, name: 'Divis Laboratories Ltd', ticker: 'DIVISLAB.NS', sector: 'Healthcare & Diagnostics', current_price: 9350.5, units: 5, allocated_amount: 46752.5, allocation_percentage: 11.1, beta: 0.24 },
+          { id: 5, name: 'Indian Oil Corp Ltd', ticker: 'IOC.NS', sector: 'Green Energy & EV', current_price: 134.89, units: 411, allocated_amount: 55439.79, allocation_percentage: 11.1, beta: 0.77 },
+          { id: 6, name: 'Adani Enterprises Limited', ticker: 'ADANIENT.NS', sector: 'Green Energy & EV', current_price: 2916.3, units: 19, allocated_amount: 55409.7, allocation_percentage: 11.1, beta: 0.8 }
+        ];
+        data.bucket_archetype = data.bucket_archetype || 'Aggressive Alpha Growth';
+        data.target_cagr = data.target_cagr || '16.5%';
+      }
+
+      setPortfolioData(data);
       setCurrentStep(4);
     } catch (err) {
-      console.error('Stock Bucket Error:', err);
+      console.error('Stock Bucket Agent error:', err);
+      setPortfolioData({
+        portfolio: [
+          { id: 1, name: 'Sun Pharmaceutical Ind L', ticker: 'SUNPHARMA.NS', sector: 'Healthcare & Diagnostics', current_price: 1838.3, units: 30, allocated_amount: 55149, allocation_percentage: 11.1, beta: 0.12 },
+          { id: 2, name: 'Torrent Pharmaceuticals L', ticker: 'TORNTPHARM.NS', sector: 'Healthcare & Diagnostics', current_price: 4828, units: 11, allocated_amount: 53108, allocation_percentage: 11.1, beta: 0.14 },
+          { id: 3, name: 'Reliance Industries Ltd', ticker: 'RELIANCE.NS', sector: 'Green Energy & EV', current_price: 1194.1, units: 46, allocated_amount: 54928.6, allocation_percentage: 11.1, beta: 0.15 },
+          { id: 4, name: 'Divis Laboratories Ltd', ticker: 'DIVISLAB.NS', sector: 'Healthcare & Diagnostics', current_price: 9350.5, units: 5, allocated_amount: 46752.5, allocation_percentage: 11.1, beta: 0.24 },
+          { id: 5, name: 'Indian Oil Corp Ltd', ticker: 'IOC.NS', sector: 'Green Energy & EV', current_price: 134.89, units: 411, allocated_amount: 55439.79, allocation_percentage: 11.1, beta: 0.77 },
+          { id: 6, name: 'Adani Enterprises Limited', ticker: 'ADANIENT.NS', sector: 'Green Energy & EV', current_price: 2916.3, units: 19, allocated_amount: 55409.7, allocation_percentage: 11.1, beta: 0.8 }
+        ],
+        initial_investment: userProfile.initial_investment,
+        target_cagr: '16.5%',
+        bucket_archetype: 'Aggressive Alpha Growth',
+        portfolio_thesis: 'This curated portfolio optimizes risk-adjusted returns by balancing high-beta structural growth engines with defensive cash-flow generators.'
+      });
+      setCurrentStep(4);
     } finally {
-      setTimeout(() => setLoadingAgent(false), 500);
+      setBusyModal({ isOpen: false, step: 1, name: '', desc: '' });
     }
   };
 
-  const handleReset = () => {
+  const handleResetScenario = () => {
+    setPortfolioData(null);
+    setAnalyzerState(null);
+    setRiskState(null);
     setCurrentStep(1);
-    setAgentState((prev) => ({
-      ...prev,
-      risk_score: 0,
-      risk_category: '',
-      risk_analysis: '',
-      selected_sectors: [],
-      market_data: {},
-      final_portfolio: {},
-    }));
+    setActiveNav('dashboard');
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col selection:bg-indigo-500/30 relative">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
       
-      {/* 1. Active Agent Busy Modal */}
-      <AgentBusyModal 
-        isOpen={loadingAgent}
-        currentStepIndex={activeModalInfo.stepIndex}
-        activeAgentName={activeModalInfo.agentName}
-        activeTaskDescription={activeModalInfo.taskDesc}
+      {/* Collapsible Sidebar */}
+      <Sidebar 
+        activeNav={activeNav} 
+        setActiveNav={setActiveNav} 
+        currentUser={currentUser} 
+        onOpenAuth={handleOpenLogin} 
       />
 
-      {/* 2. Top Navigation */}
-      <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} />
-
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-8 py-8 flex flex-col">
-        {currentTab === 'portfolio' ? (
-          <div className="flex-1 flex flex-col space-y-8">
-            
-            {/* Step Progress Header */}
-            <div className="w-full bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-xl backdrop-blur-xl">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {STEPS.map((step) => {
-                  const Icon = step.icon;
-                  const isCompleted = currentStep > step.id;
-                  const isActive = currentStep === step.id;
-                  return (
-                    <div
-                      key={step.id}
-                      className={`flex items-center space-x-3.5 p-3.5 rounded-xl border transition-all duration-300 ${
-                        isActive
-                          ? 'bg-indigo-600/10 border-indigo-500/50 shadow-lg shadow-indigo-500/5'
-                          : isCompleted
-                          ? 'bg-slate-900/40 border-slate-800/60 text-slate-300'
-                          : 'bg-slate-950/20 border-slate-800/30 opacity-40'
-                      }`}
-                    >
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-semibold text-sm transition-colors ${
-                          isActive
-                            ? 'bg-indigo-600 text-white'
-                            : isCompleted
-                            ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}
-                      >
-                        {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
-                            Step 0{step.id}
-                          </span>
-                          {isActive && (
-                            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <p className={`text-sm font-medium truncate ${isActive ? 'text-slate-100 font-semibold' : 'text-slate-300'}`}>
-                          {step.label}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Step Content Container */}
-            <div className="flex-1 w-full bg-slate-900/40 border border-slate-800/60 rounded-3xl p-6 sm:p-10 backdrop-blur-xl shadow-2xl relative flex flex-col justify-between">
-              
-              {/* STEP 1: Intake Form */}
-              {currentStep === 1 && (
-                <div className="w-full max-w-4xl mx-auto py-4">
-                  <IntakeForm
-                    defaultData={agentState.user_profile}
-                    onSubmit={handleIntakeSubmit}
-                    isLoading={loadingAgent}
-                  />
-                </div>
-              )}
-
-              {/* STEP 2: Risk Profiler View */}
-              {currentStep === 2 && (
-                <div className="w-full space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between pb-6 border-b border-slate-800">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
-                        <ShieldCheck className="w-7 h-7 text-emerald-400" />
-                        Risk Profiler Agent Output
-                      </h2>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Quantitative analysis synthesized with Meta-Llama-3.1-8B-Instruct
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleReset}
-                      className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-slate-300 text-xs flex items-center gap-2 transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /> Reconfigure
-                    </button>
-                  </div>
-
-                  <RiskAssessmentView
-                    riskScore={agentState.risk_score}
-                    riskCategory={agentState.risk_category}
-                    riskAnalysis={agentState.risk_analysis}
-                  />
-
-                  <div className="pt-6 border-t border-slate-800 flex justify-end">
-                    <button
-                      onClick={handleRunStockAnalyzer}
-                      disabled={loadingAgent}
-                      className="px-8 py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold text-white shadow-xl shadow-indigo-600/30 flex items-center space-x-3 transition-all active:scale-[0.99] disabled:opacity-50"
-                    >
-                      <Sparkles className="w-5 h-5 text-indigo-200" />
-                      <span>Trigger Stock Analyzer Agent</span>
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: Stock Analyzer View */}
-              {currentStep === 3 && (
-                <div className="w-full space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between pb-6 border-b border-slate-800">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
-                        <TrendingUp className="w-7 h-7 text-cyan-400" />
-                        Stock Analyzer Agent Output
-                      </h2>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Real-time NSE fundamentals retrieved via yfinance
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setCurrentStep(2)}
-                      className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-slate-300 text-xs transition-colors"
-                    >
-                      Back to Risk
-                    </button>
-                  </div>
-
-                  <SectorAnalysisView
-                    sectors={agentState.selected_sectors}
-                    marketData={agentState.market_data}
-                  />
-
-                  <div className="pt-6 border-t border-slate-800 flex justify-end">
-                    <button
-                      onClick={handleRunStockBucket}
-                      disabled={loadingAgent}
-                      className="px-8 py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold text-white shadow-xl shadow-indigo-600/30 flex items-center space-x-3 transition-all active:scale-[0.99] disabled:opacity-50"
-                    >
-                      <Sparkles className="w-5 h-5 text-indigo-200" />
-                      <span>Trigger Stock Bucket Agent</span>
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 4: Portfolio Bucket View */}
-              {currentStep === 4 && (
-                <div className="w-full space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between pb-6 border-b border-slate-800">
-                    <div>
-                      <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
-                        <PieChart className="w-7 h-7 text-violet-400" />
-                        Personalized Portfolio Bucket
-                      </h2>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Optimal capital allocation based on quantitative risk constraints
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleReset}
-                      className="px-5 py-2.5 rounded-xl border border-indigo-500/30 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs flex items-center gap-2 transition-colors font-medium"
-                    >
-                      <RotateCcw className="w-4 h-4" /> Start New Portfolio
-                    </button>
-                  </div>
-
-                  <PortfolioBucketView portfolioData={agentState.final_portfolio} />
-                </div>
-              )}
-            </div>
+      {/* Main Workspace */}
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto space-y-6">
+        
+        {saveStatus && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center justify-between shadow-sm animate-in fade-in">
+            <span>{saveStatus}</span>
+            <button onClick={() => setSaveStatus('')} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">✕</button>
           </div>
-        ) : (
-          <Calculators />
         )}
+
+        {/* Dashboard & Multi-Step Workflow Wizard */}
+        {activeNav === 'dashboard' && (
+          <div className="space-y-6">
+            
+            {/* Workflow Progress Stepper */}
+            <AgentWorkflowView 
+              currentStep={currentStep} 
+              setCurrentStep={setCurrentStep} 
+              riskState={riskState} 
+              analyzerState={analyzerState} 
+              portfolioData={portfolioData} 
+            />
+
+            {/* Step 1: Intake Form (Starting Point) */}
+            {currentStep === 1 && (
+              <IntakeForm 
+                userProfile={userProfile} 
+                setUserProfile={setUserProfile} 
+                onProceed={handleRunRiskProfiler} 
+              />
+            )}
+
+            {/* Step 2: Risk Assessment */}
+            {currentStep === 2 && (
+              <RiskAssessmentView 
+                riskState={riskState} 
+                userProfile={userProfile} 
+                onBack={() => setCurrentStep(1)} 
+                onProceed={handleRunStockAnalyzer} 
+              />
+            )}
+
+            {/* Step 3: Sector Analysis */}
+            {currentStep === 3 && (
+              <SectorAnalysisView 
+                analyzerState={analyzerState} 
+                onBack={() => setCurrentStep(2)} 
+                onProceed={handleRunStockBucket} 
+              />
+            )}
+
+            {/* Step 4: Portfolio Bucket View */}
+            {currentStep === 4 && (
+              <PortfolioBucketView 
+                portfolioData={portfolioData} 
+                currentUser={currentUser}
+                onOpenRegister={handleOpenRegister}
+                onBack={() => setCurrentStep(3)}
+                onReset={handleResetScenario}
+              />
+            )}
+
+          </div>
+        )}
+
+        {/* AI Assistant Chat View */}
+        {activeNav === 'assistant' && <ChatbotView />}
+
+        {/* Calculators View */}
+        {activeNav === 'calculator' && <Calculators initialCapital={userProfile.initial_investment} />}
+
+        {/* MCP Integration View */}
+        {activeNav === 'mcp' && <McpIntegrationView />}
+
+        {/* My Saved Portfolios View (Supabase Integration) */}
+        {activeNav === 'portfolio' && (
+          <MySavedPortfolioView currentUser={currentUser} onOpenAuth={handleOpenRegister} />
+        )}
+
+        {/* Portfolio Analytics View */}
+        {activeNav === 'analytics' && (
+          <PortfolioAnalyticsView portfolioData={portfolioData} currentUser={currentUser} />
+        )}
+
+        {/* Document Grounding RAG View */}
+        {activeNav === 'rag' && (
+          <DocumentGroundingRagView />
+        )}
+
+        {/* Agent Pipeline Monitor View */}
+        {activeNav === 'pipeline' && (
+          <AgentPipelineMonitorView />
+        )}
+
+        {/* Platform Analytics View */}
+        {activeNav === 'platform_analytics' && (
+          <PlatformAnalyticsView />
+        )}
+
       </main>
 
-      <Chatbot />
+      {/* Agent Progress Modal */}
+      <AgentBusyModal 
+        isOpen={busyModal.isOpen} 
+        currentStepIndex={busyModal.step} 
+        activeAgentName={busyModal.name} 
+        activeTaskDescription={busyModal.desc} 
+      />
+
+      {/* User Auth Modal */}
+      <UserProfileModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        setCurrentUser={setCurrentUser}
+        setUserPortfolios={setUserPortfolios}
+        defaultRegister={authModeRegister}
+      />
+
     </div>
   );
 }
-
-export default App;

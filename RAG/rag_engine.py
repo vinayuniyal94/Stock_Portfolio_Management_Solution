@@ -2,8 +2,12 @@ import os
 import time
 from dotenv import load_dotenv
 from pinecone import Pinecone
-from huggingface_hub import InferenceClient
-from Tools.logger import log_agent_start, log_llm_call, log_tool_call
+from Tools.logger import log_agent_start, log_tool_call
+from Tools.llm_tool import query_llm_with_fallback
+from Prompts.prompt_templates import (
+    RAG_CHATBOT_SYSTEM_PROMPT,
+    get_rag_chatbot_user_prompt
+)
 
 load_dotenv()
 
@@ -12,29 +16,26 @@ class IndianStockRAGEngine:
         self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
         self.index_host = os.getenv("PINECONE_INDEX_HOST")
         self.index_name = os.getenv("PINECONE_INDEX_NAME", "indian-stock-education")
-        self.hf_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-        self.hf_model = os.getenv("HF_CHAT_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 
         self.index = None
         if self.pinecone_api_key and "placeholder" not in self.pinecone_api_key:
             try:
                 pc = Pinecone(api_key=self.pinecone_api_key)
                 self.index = pc.Index(host=self.index_host) if self.index_host else pc.Index(self.index_name)
-                print(" Connected to Pinecone index.")
             except Exception as e:
                 print(f"[ERROR] Pinecone Connection Failed: {e}")
 
-        self.hf_client = None
-        if self.hf_token and "placeholder" not in self.hf_token:
-            try:
-                self.hf_client = InferenceClient(api_key=self.hf_token, provider="auto")
-                print(f" Connected to Hugging Face LLM ({self.hf_model}).")
-            except Exception as e:
-                print(f"[ERROR] Hugging Face Client Init Failed: {e}")
-
-    def semantic_search(self, query: str, top_k: int = 3) -> str:
+    def semantic_search_with_observability(self, query: str, top_k: int = 4):
         t0 = time.time()
         contexts = []
+        detailed_chunks = []
+
+        print("\n" + "=" * 100)
+        print("  [PINECONE SEMANTIC SEARCH RETRIEVAL - TOP-K OBSERVABILITY]")
+        print(f"  • Query: \"{query}\"")
+        print(f"  • Top-K Requested: {top_k}")
+        print("=" * 100)
+
         if self.index:
             try:
                 search_res = self.index.search_records(
@@ -42,97 +43,82 @@ class IndianStockRAGEngine:
                     query={"inputs": {"text": query}, "top_k": top_k},
                     fields=["text", "source", "chunk_id"]
                 )
-                hits = getattr(search_res.result, "hits", []) if hasattr(search_res, "result") else search_res.get("result", {}).get("hits", [])
-                for hit in hits:
+
+                hits = (
+                    getattr(search_res.result, "hits", [])
+                    if hasattr(search_res, "result")
+                    else search_res.get("result", {}).get("hits", [])
+                )
+
+                for idx, hit in enumerate(hits, 1):
                     fields = getattr(hit, "fields", None) or (hit.get("fields") if isinstance(hit, dict) else {})
-                    txt = fields.get("text", "")
-                    if txt:
-                        contexts.append(txt)
+                    score = getattr(hit, "score", None) or (hit.get("_score") if isinstance(hit, dict) else 0.0)
+                    chunk_id = getattr(hit, "_id", None) or hit.get("_id") or fields.get("chunk_id", f"chk_{idx}")
+                    src = fields.get("source", "knowledge_base")
+                    raw_text = fields.get("text", "")
+
+                    if raw_text:
+                        char_count = len(raw_text)
+                        word_count = len(raw_text.split())
+
+                        contexts.append(raw_text)
+                        detailed_chunks.append({
+                            "rank": idx,
+                            "chunk_id": chunk_id,
+                            "char_size": char_count,
+                            "word_size": word_count,
+                            "score": round(float(score), 4) if isinstance(score, (int, float)) else score,
+                            "source": src,
+                            "text": raw_text
+                        })
             except Exception as e:
-                print(f"[ERROR] Pinecone search error: {e}")
+                print(f"  [ERROR] Pinecone search error: {e}")
+
+        duration = time.time() - t0
+
+        print(f"\n--- [PINECONE RETRIEVED {len(detailed_chunks)} CHUNKS in {duration:.3f}s] ---")
+        print(f"{'Rank':<6}{'Chunk ID':<25}{'Score':<10}{'Char Size':<12}{'Word Size':<12}{'Source'}")
+        print("-" * 80)
+        for c in detailed_chunks:
+            print(f"#{c['rank']:<5}{str(c['chunk_id']):<25}{c['score']:<10}{c['char_size']:<12}{c['word_size']:<12}{c['source']}")
+            print(f"Preview: {c['text'][:140].strip()}...\n")
+
+        chunk_summaries = [f"{c['chunk_id']} ({c['char_size']} chars)" for c in detailed_chunks]
 
         log_tool_call(
-            tool_name="Pinecone Vector Retrieval (llama-text-embed-v2)",
-            inputs={"query": query, "top_k": top_k, "namespace": "stock-education"},
-            output_summary=f"Retrieved {len(contexts)} chunks",
-            duration=time.time() - t0
+            tool_name="Pinecone Vector Search",
+            inputs={"query": query, "top_k": top_k},
+            output_summary=f"Retrieved {len(detailed_chunks)} chunks: {chunk_summaries}",
+            duration=duration
         )
-        return "\n\n---\n\n".join(contexts) if contexts else "General SEBI and Indian stock market principles."
+
+        combined_context = "\n\n---\n\n".join(contexts) if contexts else "Standard SEBI and Indian stock market educational guidelines."
+        return combined_context, detailed_chunks
 
     def ask(self, query: str) -> str:
-        log_agent_start("NiveshGuru RAG Chatbot Agent", f"Process user education query: '{query}'")
+        log_agent_start("NiveshGuru RAG Chatbot Agent", f"Process user query: '{query}'")
 
-        # Step 1: Semantic Search
-        context = self.semantic_search(query)
+        combined_context, chunks = self.semantic_search_with_observability(query, top_k=4)
 
-        # Step 2: Prepare Prompting
-        system_prompt = (
-            "You are 'NiveshGuru', an institutional Indian stock market mentor (NSE/BSE). "
-            "Explain concepts accurately, professionally, and conversationally with practical examples. "
-            "Never quote raw chunks or say 'according to context'. Give clean direct answers."
+        system_prompt = RAG_CHATBOT_SYSTEM_PROMPT
+        user_prompt = get_rag_chatbot_user_prompt(query, combined_context)
+
+        answer = query_llm_with_fallback(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            agent_name="NiveshGuru RAG Chatbot",
+            temperature=0.3,
+            max_tokens=600
         )
-        user_prompt = f"Reference Context:\n{context}\n\nInvestor Query: {query}\n\nExplanation:"
 
-        # Step 3: LLM Inference
-        llm_start = time.time()
-        final_answer = ""
-        candidate_models = [self.hf_model, "HuggingFaceH4/zephyr-7b-beta"]
-
-        if self.hf_client:
-            for model_id in candidate_models:
-                try:
-                    resp = self.hf_client.chat.completions.create(
-                        model=model_id,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        max_tokens=450,
-                        temperature=0.3
-                    )
-                    final_answer = resp.choices[0].message.content.strip()
-                    if final_answer:
-                        log_llm_call(
-                            agent_name="NiveshGuru RAG Chatbot",
-                            model_name=model_id,
-                            system_prompt=system_prompt,
-                            user_prompt=user_prompt,
-                            output_text=final_answer,
-                            latency=time.time() - llm_start,
-                            provider="Hugging Face Serverless"
-                        )
-                        break
-                except Exception as err:
-                    print(f"  [WARN] Model {model_id} failed: {err}")
-
-        if not final_answer:
-            if "beta" in query.lower():
-                final_answer = (
-                    "Beta measures how volatile a stock is compared to the broader market (like the Nifty 50 or Sensex):\n\n"
-                    "• Beta = 1.0: Moves in lockstep with the benchmark index.\n"
-                    "• Beta > 1.0: High volatility (amplifies both market upswings and drawdowns).\n"
-                    "• Beta < 1.0: Defensive stock (exhibits lower price swings, common in FMCG and Pharma)."
-                )
-            elif "pe" in query.lower() or "p/e" in query.lower():
-                final_answer = (
-                    "The Price-to-Earnings (P/E) ratio compares a company's share price to its per-share earnings (EPS).\n\n"
-                    "• High P/E: Indicates strong growth expectations or a premium valuation.\n"
-                    "• Low P/E: Indicates potential undervaluation or cyclical performance.\n"
-                    "• Always compare P/E against the respective industry sector benchmark."
-                )
-            else:
-                final_answer = "For sustainable capital compounding in Indian markets, maintain asset diversification across large and mid-caps with a disciplined 3-7 year horizon."
-
-            log_llm_call(
-                agent_name="NiveshGuru RAG Chatbot (Static Rule Engine)",
-                model_name="Expert Financial Rules",
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                output_text=final_answer,
-                latency=time.time() - llm_start,
-                provider="Deterministic Fallback"
+        if not answer:
+            answer = (
+                "Beta measures equity volatility relative to the benchmark Nifty 50 index. "
+                "A Beta > 1 signifies higher volatility than the index, while Beta < 1 indicates defensive characteristics."
             )
 
-        return final_answer
+        return answer
 
+# Singleton Export
 rag_service = IndianStockRAGEngine()
+rag_engine = rag_service
