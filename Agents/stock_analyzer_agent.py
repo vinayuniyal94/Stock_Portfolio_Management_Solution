@@ -12,7 +12,10 @@ from Prompts.prompt_templates import (
 )
 
 def run_stock_analyzer_agent(state: dict) -> dict:
-    log_agent_start("Stock Analyzer Agent", "Dynamically identify industries & pull live NSE market data")
+    """
+    Dynamically identifies optimal macroeconomic sectors and pulls strict domain-verified equities.
+    """
+    log_agent_start("Stock Analyzer Agent", "Dynamically identifying optimal sectors & pulling exact equities")
 
     risk_category = state.get("risk_category", "Moderate")
     risk_score = int(state.get("risk_score", 50))
@@ -20,7 +23,6 @@ def run_stock_analyzer_agent(state: dict) -> dict:
     horizon = user_profile.get("investment_horizon", "5-7 Years")
     goal = user_profile.get("primary_goal", "Wealth Creation")
 
-    # 1. LLM identifies sectors dynamically based on mandate (No static pool)
     system_prompt = STOCK_ANALYZER_SYSTEM_PROMPT
     user_prompt = get_stock_analyzer_user_prompt(
         risk_score=risk_score,
@@ -33,7 +35,7 @@ def run_stock_analyzer_agent(state: dict) -> dict:
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         agent_name="Stock Analyzer Agent",
-        max_tokens=450,
+        max_tokens=500,
         expect_json=True
     )
 
@@ -51,25 +53,27 @@ def run_stock_analyzer_agent(state: dict) -> dict:
         except Exception as e:
             print(f"[Parsing Error] Stock analyzer JSON parse failed: {e}")
 
-    # Dynamic fallback based on calculated score if LLM is unavailable
-    if len(selected_sectors) < 5:
+    # Dynamic fallback sectors based on risk score
+    if not selected_sectors:
         if risk_score >= 75:
-            selected_sectors = ["Defense & Aerospace", "Clean Mobility & EV", "Cloud & AI Enterprise", "Capital Goods & Capex", "Private Credit & Banking"]
+            selected_sectors = ["Infrastructure Capex", "Specialty Chemicals", "Green Energy & EV", "Defense & Aerospace", "Information Technology"]
         elif risk_score <= 45:
-            selected_sectors = ["FMCG Staples", "Pharmaceuticals & Healthcare", "Power Transmission & Utilities", "Public Sector Bluechips", "Telecom Infrastructure"]
+            selected_sectors = ["FMCG Staples", "Healthcare & Diagnostics", "Banking & Financial Services", "Infrastructure Capex"]
         else:
-            selected_sectors = ["Banking & Financial Services", "Information Technology", "Automotive & Auto Ancillary", "Healthcare Diagnostics", "Renewable Energy"]
+            selected_sectors = ["Banking & Financial Services", "Information Technology", "Infrastructure Capex", "Specialty Chemicals", "Automotive & Auto Ancillary"]
 
         sector_rationales = {
-            s: f"Strategically selected based on institutional quantitative score of {risk_score}/100 and a {horizon} mandate."
+            s: f"Dynamically calibrated sector for institutional compounding under a {horizon} horizon."
             for s in selected_sectors
         }
 
-    # 2. Query live stocks from NSE / Yahoo APIs for each identified industry
     market_data = {}
+    valid_sectors = []
+    total_pulled = 0
+
     for sector in selected_sectors:
-        print(f"\n[DYNAMIC QUERY]: Discovering live NSE equities for '{sector}'...")
-        discovered_tickers = search_live_nse_equities_by_sector(sector, count=5)
+        print(f"\n[DYNAMIC QUERY]: Discovering exact live equities for sector: '{sector}'...")
+        discovered_tickers = search_live_nse_equities_by_sector(sector, count=10)
 
         stock_list = []
         for ticker in discovered_tickers:
@@ -78,13 +82,17 @@ def run_stock_analyzer_agent(state: dict) -> dict:
                 metrics["sector"] = sector
                 metrics["sector_rationale"] = sector_rationales.get(sector, "")
                 stock_list.append(metrics)
+                total_pulled += 1
 
-        market_data[sector] = stock_list
+        if len(stock_list) > 0:
+            market_data[sector] = stock_list
+            valid_sectors.append(sector)
 
     return {
         **state,
-        "selected_sectors": selected_sectors,
+        "selected_sectors": valid_sectors,
         "sector_rationales": sector_rationales,
         "market_data": market_data,
-        "current_step": "Live dynamic industry discovery & quote acquisition complete"
+        "last_agent": "stock_analyzer",  # Set flag for Critique Agent tracking
+        "current_step": f"Dynamic sector analysis complete. Pulled {total_pulled} verified equities across {len(valid_sectors)} sectors. Awaiting CRO audit."
     }

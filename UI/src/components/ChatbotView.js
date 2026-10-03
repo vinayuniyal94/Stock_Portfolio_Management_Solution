@@ -58,7 +58,6 @@ export default function ChatbotView() {
       const endTime = performance.now();
       const elapsed = Math.round(endTime - startTime);
 
-      // Extract telemetry from response or fallback to estimated metrics
       const meta = data.metadata || {
         llm: data.llm || 'gpt-4o',
         chunks: data.chunks_retrieved || 4,
@@ -181,7 +180,7 @@ export default function ChatbotView() {
         </button>
       </div>
 
-      {/* Message Canvas */}
+      {/* Message Canvas Window */}
       <div className="flex-1 overflow-y-auto px-6 sm:px-12 py-6 space-y-6 bg-slate-50/40">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
@@ -200,7 +199,7 @@ export default function ChatbotView() {
               }`}>
                 {isUser ? <p className="leading-relaxed text-xs">{msg.text}</p> : renderFormatted(msg.text)}
                 
-                {/* Telemetry & Metadata Footer for Assistant Messages */}
+                {/* Telemetry Footer */}
                 {!isUser && msg.metadata && (
                   <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-[10px] font-mono text-slate-500 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/60">
                     <div className="flex items-center gap-1 text-emerald-700 font-semibold">
@@ -257,7 +256,7 @@ export default function ChatbotView() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Compact Quick Prompts */}
+      {/* Quick Prompts */}
       <div className="px-8 py-3 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase text-slate-400 font-bold">
           <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Quick Prompts:
