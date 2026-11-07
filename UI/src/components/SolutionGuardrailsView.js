@@ -1,119 +1,83 @@
 import React from 'react';
-import { ShieldAlert, Lock, CheckCircle2, Cpu, FileText, Database, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, Lock, ShieldCheck, Cpu } from 'lucide-react';
 
 export default function SolutionGuardrailsView() {
-  const guardrailLayers = [
+  const guardrailsList = [
     {
-      title: 'PII Redaction & Privacy Shield',
-      category: 'Data Protection',
-      status: 'Active',
-      description: 'Automatically scans and redacts sensitive user information before payloads reach LLM endpoints or vector stores.',
-      rules: [
-        'Email Address Masking (e.g. [REDACTED_EMAIL])',
-        'Indian Phone Number Scrubbing (e.g. [REDACTED_PHONE])',
-        'PAN Card & Aadhaar Number Redaction',
-        'Credit Card & Financial Identifier Protection'
-      ]
+      title: "PII Redaction & Masking",
+      description: "Automatically detects and redacts sensitive personal data (PAN, Aadhaar, phone numbers, emails, and credit cards) before text reaches agent context or LLM payloads.",
+      status: "Active",
+      icon: ShieldCheck
     },
     {
-      title: 'Prompt Injection & Jailbreak Defense',
-      category: 'Agentic Security',
-      status: 'Active',
-      description: 'Inspects all user prompts and API payloads against known conversational attack vectors and model override commands.',
-      rules: [
-        'Blocks "Ignore previous instructions" directives',
-        'Prevents "Developer mode" or "DAN" jailbreak attempts',
-        'Blocks system prompt extraction and internal instruction leaks',
-        'Payload token length restriction (Max 5,000 characters)'
-      ]
+      title: "Prompt Injection & Jailbreak Defense",
+      description: "Scans incoming queries and multi-agent string inputs for malicious override commands, system prompt leaks, or unauthorized role changes.",
+      status: "Active",
+      icon: Lock
     },
     {
-      title: 'SEBI Fiduciary & Compliance Guardrails',
-      category: 'Regulatory Compliance',
-      status: 'Active',
-      description: 'Enforces strict financial advisory boundaries across all multi-agent steps (Risk Profiler, Stock Analyzer, Stock Bucket).',
-      rules: [
-        'Strict prohibition against direct pump-and-dump stock tips',
-        'Mandatory risk calibration rationale for all asset buckets',
-        'Benchmarking against Nifty 50 and Nifty Next 50 indexes',
-        'Transparent fee and historical Sharpe/Sortino ratio reporting'
-      ]
+      title: "Deterministic Sector-to-Stock Mapping",
+      description: "Enforces strict structural isolation preventing cross-contamination (e.g. ensuring heavy engineering or IT tickers do not slip into Consumer Staples).",
+      status: "Active",
+      icon: ShieldAlert
     },
     {
-      title: 'Supabase Row Level Security (RLS)',
-      category: 'Database & Session Security',
-      status: 'Active',
-      description: 'Secures user portfolios and authentication state using PostgreSQL Row Level Security policies.',
-      rules: [
-        'User-isolated portfolio persistence linked via UUID (`user_id`)',
-        'Encrypted session storage and secure password hashing',
-        'Strict CORS and API header validations'
-      ]
+      title: "CRO 3-Iteration Audit Gatekeeper",
+      description: "Independent Chief Risk Officer agent audits upstream outputs across rigorous confidence scoring thresholds, automatically re-running failed iterations.",
+      status: "Active",
+      icon: Cpu
     }
   ];
 
   return (
-    <div className="w-full space-y-6 animate-in fade-in duration-200 max-w-5xl mx-auto">
+    <div className="space-y-6 animate-in fade-in duration-200 max-w-5xl mx-auto pb-6">
       
-      {/* Header */}
-      <div className="border-b border-slate-200 pb-4 flex items-center justify-between">
+      {/* Header Banner */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
-            Enterprise Security Architecture
+          <span className="text-[10px] font-mono tracking-widest uppercase text-emerald-700 font-bold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+            Enterprise Security & Compliance
           </span>
-          <h1 className="text-2xl font-extrabold text-slate-900 mt-1 flex items-center gap-2">
-            <Lock className="w-6 h-6 text-emerald-600" /> Solution Guardrails & Security Suite
-          </h1>
-          <p className="text-xs text-slate-500 mt-1 font-mono">
-            Platform-wide defense mechanisms safeguarding PII, preventing agentic prompt injections, and enforcing SEBI compliance.
+          <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight mt-1">
+            Solution Guardrails & Security Suite
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Active defense mechanisms protecting ArthVeda AI multi-agent workflows, data integrity, and privacy compliance.
           </p>
+        </div>
+        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-2.5 rounded-2xl text-xs font-mono font-bold border border-emerald-200 shadow-2xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <span>All Systems Guardrailed</span>
         </div>
       </div>
 
-      {/* Grid of Security Layers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {guardrailLayers.map((layer, idx) => (
-          <div key={idx} className="enterprise-card p-6 bg-white rounded-3xl border border-slate-200 space-y-4 shadow-sm flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {layer.category}
-                </span>
-                <span className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-600 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> {layer.status}
-                </span>
+      {/* Guardrails Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {guardrailsList.map((item, idx) => {
+          const Icon = item.icon;
+          return (
+            <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:border-emerald-300 transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
+                    <Icon className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <span className="text-[10px] font-mono uppercase tracking-wider bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200 font-bold">
+                    {item.status}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900">{item.title}</h3>
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  {item.description}
+                </p>
               </div>
-              <h3 className="text-base font-bold text-slate-900">{layer.title}</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {layer.description}
-              </p>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <span>GuardrailsManager v2.4</span>
+                <span className="text-emerald-600 font-bold">Enforced</span>
+              </div>
             </div>
-
-            <div className="pt-4 border-t border-slate-100 space-y-2">
-              <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">Enforced Rules:</span>
-              <ul className="space-y-1.5">
-                {layer.rules.map((rule, rIdx) => (
-                  <li key={rIdx} className="flex items-start gap-2 text-xs text-slate-700">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                    <span>{rule}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Security Footer Callout */}
-      <div className="p-6 rounded-3xl bg-slate-900 text-white space-y-2 shadow-xl border border-slate-800 flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono font-bold">
-            <ShieldCheck className="w-4 h-4" /> Zero-Trust Multi-Agent Pipeline
-          </div>
-          <p className="text-xs text-slate-400">
-            Every query, agent state transition, and vector search is sanitized through `guardrails.py` before model execution.
-          </p>
-        </div>
+          );
+        })}
       </div>
 
     </div>

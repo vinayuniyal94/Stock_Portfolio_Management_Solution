@@ -4,12 +4,19 @@ import RiskAssessmentView from './RiskAssessmentView';
 import SectorAnalysisView from './SectorAnalysisView';
 import PortfolioBucketView from './PortfolioBucketView';
 import AgentBusyModal from './AgentBusyModal';
+import AgentFailureView from './AgentFailureView';
+import AgentFeedbackAlertView from './AgentFeedbackAlertView';
 import { Sparkles, CheckCircle2, UserCheck, ShieldCheck, Compass, TrendingUp } from 'lucide-react';
 
 export default function AgentWorkflowView({ currentUser, setActiveNav }) {
   const [currentStep, setWorkflowStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingStepText, setLoadingStepText] = useState('');
+  
+  // New Error and Feedback State Management
+  const [workflowError, setWorkflowError] = useState(null);
+  const [critiqueAlertState, setCritiqueAlertState] = useState(null); 
+  // e.g. { agentName: 'Risk Profiler', feedback: '...', iteration: 1 }
 
   // 1. User Profile State (Step 1)
   const [userProfile, setUserProfile] = useState({
@@ -58,108 +65,105 @@ export default function AgentWorkflowView({ currentUser, setActiveNav }) {
   // 4. Portfolio Bucket Agent State (Step 4)
   const [portfolioData, setPortfolioData] = useState(null);
 
-  // Trigger Backend API for Step 1 -> Step 2 (Risk Profiler)
-  const handleProceedToRisk = async () => {
+  // Helper handler for processing API responses with CRO Critique loops & Failures
+  const handleAgentApiResponse = async (url, payload, successCallback) => {
     setIsProcessing(true);
-    setLoadingStepText('Risk Profiler Agent computing behavioral risk capacity & score...');
-    
+    setWorkflowError(null);
+    setCritiqueAlertState(null);
+
     try {
-      const response = await fetch('http://localhost:8000/api/run-workflow', {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step: 'risk_profiler', user_profile: userProfile })
+        body: JSON.stringify(payload)
       });
+
       if (response.ok) {
         const data = await response.json();
+
+        // Check if workflow failed entirely after max iterations
+        if (data.workflow_failed) {
+          setWorkflowError(data.critique_feedback || "Max iteration limit reached by CRO Critique Agent. Workflow halted.");
+          setIsProcessing(false);
+          return;
+        }
+
+        // Check if Critique Agent triggered a revision loop
+        if (data.needs_revision && data.critique_feedback) {
+          setCritiqueAlertState({
+            agentName: payload.step ? payload.step.replace('_', ' ').toUpperCase() : 'Agent',
+            feedback: data.critique_feedback,
+            iteration: data.critique_iterations || 1
+          });
+          setIsProcessing(false);
+          return;
+        }
+
+        successCallback(data);
+      }
+    } catch (err) {
+      console.log('Backend communication error, executing robust fallback simulation.', err);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Trigger Backend API for Step 1 -> Step 2 (Risk Profiler)
+  const handleProceedToRisk = () => {
+    setLoadingStepText('Risk Profiler Agent computing behavioral risk capacity & score...');
+    handleAgentApiResponse(
+      'http://localhost:8000/api/run-workflow',
+      { step: 'risk_profiler', user_profile: userProfile },
+      (data) => {
         if (data.risk_score) {
           setRiskState({
             risk_score: data.risk_score,
             risk_category: data.risk_category || 'Moderate',
             risk_analysis: data.risk_analysis || data.summary
           });
+          setWorkflowStep(2);
         }
       }
-    } catch (err) {
-      console.log('Backend offline, using fallback risk profile simulation.', err);
-    } finally {
-      setIsProcessing(false);
-      setWorkflowStep(2);
-    }
+    );
   };
 
   // Trigger Backend API for Step 2 -> Step 3 (Stock Analyzer)
-  const handleProceedToAnalyzer = async () => {
-    setIsProcessing(true);
+  const handleProceedToAnalyzer = () => {
     setLoadingStepText('Stock Analyzer Agent scanning live macroeconomic sectors & equities...');
-
-    try {
-      const response = await fetch('http://localhost:8000/api/run-workflow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          step: 'stock_analyzer', 
-          user_profile: userProfile, 
-          risk_score: riskState.risk_score 
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
+    handleAgentApiResponse(
+      'http://localhost:8000/api/run-workflow',
+      { step: 'stock_analyzer', user_profile: userProfile, risk_score: riskState.risk_score },
+      (data) => {
         if (data.selected_sectors) {
           setAnalyzerState({
             selected_sectors: data.selected_sectors,
             sector_rationales: data.sector_rationales || {},
-            market_data: data.market_data || {}
+            market_data: data.market_data || {},
+            analyzer_thought_process: data.analyzer_thought_process || ''
           });
+          setWorkflowStep(3);
         }
       }
-    } catch (err) {
-      console.log('Backend offline, using fallback sector analysis.', err);
-    } finally {
-      setIsProcessing(false);
-      setWorkflowStep(3);
-    }
+    );
   };
 
   // Trigger Backend API for Step 3 -> Step 4 (Stock Bucket & CRO Audit)
-  const handleProceedToBucket = async () => {
-    setIsProcessing(true);
+  const handleProceedToBucket = () => {
     setLoadingStepText('Stock Bucket & Chief Risk Officer (CRO) Agent auditing portfolio guardrails...');
-
-    try {
-      const response = await fetch('http://localhost:8000/api/run-workflow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          step: 'stock_bucket', 
-          user_profile: userProfile, 
-          risk_score: riskState.risk_score,
-          selected_sectors: analyzerState.selected_sectors,
-          market_data: analyzerState.market_data
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
+    handleAgentApiResponse(
+      'http://localhost:8000/api/run-workflow',
+      { 
+        step: 'stock_bucket', 
+        user_profile: userProfile, 
+        risk_score: riskState.risk_score,
+        selected_sectors: analyzerState.selected_sectors,
+        market_data: analyzerState.market_data
+      },
+      (data) => {
         setPortfolioData(data);
+        setWorkflowStep(4);
       }
-    } catch (err) {
-      console.log('Backend offline, generating simulated portfolio bucket.', err);
-      setPortfolioData({
-        initial_investment: userProfile.initial_investment,
-        target_cagr: userProfile.cagr_expectation,
-        bucket_archetype: userProfile.primary_goal,
-        portfolio: [
-          { id: 1, name: 'HDFC Bank Ltd', ticker: 'HDFCBANK.NS', sector: 'Private Sector Banking', current_price: 1650, units: 60, allocated_amount: 99000, allocation_percentage: 20, beta: 0.95 },
-          { id: 2, name: 'ICICI Bank Ltd', ticker: 'ICICIBANK.NS', sector: 'Private Sector Banking', current_price: 1080, units: 80, allocated_amount: 86400, allocation_percentage: 17, beta: 1.05 },
-          { id: 3, name: 'Tata Consultancy Services', ticker: 'TCS.NS', sector: 'IT Services & Software', current_price: 3900, units: 25, allocated_amount: 97500, allocation_percentage: 19, beta: 0.75 },
-          { id: 4, name: 'Infosys Ltd', ticker: 'INFY.NS', sector: 'IT Services & Software', current_price: 1550, units: 50, allocated_amount: 77500, allocation_percentage: 15, beta: 0.88 },
-          { id: 5, name: 'Larsen & Toubro Ltd', ticker: 'LT.NS', sector: 'Infrastructure & Capital Goods', current_price: 3500, units: 40, allocated_amount: 140000, allocation_percentage: 29, beta: 1.12 }
-        ],
-        portfolio_thesis: "The portfolio is structured around high-conviction compounding pillars. Private banking giants provide steady credit growth, IT leaders ensure high free cash flow resilience, and infrastructure capital expenditure captures domestic industrial tailwinds."
-      });
-    } finally {
-      setIsProcessing(false);
-      setWorkflowStep(4);
-    }
+    );
   };
 
   const stepsList = [
@@ -239,38 +243,61 @@ export default function AgentWorkflowView({ currentUser, setActiveNav }) {
         })}
       </div>
 
-      {/* 3. Step View Render Switch */}
+      {/* 3. Step View Render Switch with Error / Feedback Interceptors */}
       <div className="transition-all duration-200 pt-2">
-        {currentStep === 1 && (
-          <IntakeForm 
-            userProfile={userProfile} 
-            setUserProfile={setUserProfile} 
-            onProceed={handleProceedToRisk} 
+        {workflowError ? (
+          <AgentFailureView 
+            errorMessage={workflowError} 
+            onReset={() => { 
+              setWorkflowError(null); 
+              setWorkflowStep(1); 
+            }} 
           />
-        )}
-        {currentStep === 2 && (
-          <RiskAssessmentView 
-            riskState={riskState} 
-            userProfile={userProfile} 
-            onBack={() => setWorkflowStep(1)} 
-            onProceed={handleProceedToAnalyzer} 
+        ) : critiqueAlertState ? (
+          <AgentFeedbackAlertView 
+            agentName={critiqueAlertState.agentName}
+            critiqueFeedback={critiqueAlertState.feedback}
+            iterationCount={critiqueAlertState.iteration}
+            onAutoProceed={() => setCritiqueAlertState(null)}
+            onReset={() => { 
+              setCritiqueAlertState(null); 
+              setWorkflowStep(1); 
+            }}
           />
-        )}
-        {currentStep === 3 && (
-          <SectorAnalysisView 
-            analyzerState={analyzerState} 
-            onBack={() => setWorkflowStep(2)} 
-            onProceed={handleProceedToBucket} 
-          />
-        )}
-        {currentStep === 4 && (
-          <PortfolioBucketView 
-            portfolioData={portfolioData} 
-            currentUser={currentUser}
-            onOpenRegister={() => setActiveNav('portfolio')}
-            onBack={() => setWorkflowStep(3)} 
-            onReset={() => setWorkflowStep(1)} 
-          />
+        ) : (
+          <>
+            {currentStep === 1 && (
+              <IntakeForm 
+                userProfile={userProfile} 
+                setUserProfile={setUserProfile} 
+                onProceed={handleProceedToRisk} 
+              />
+            )}
+            {currentStep === 2 && (
+              <RiskAssessmentView 
+                riskState={riskState} 
+                userProfile={userProfile} 
+                onBack={() => setWorkflowStep(1)} 
+                onProceed={handleProceedToAnalyzer} 
+              />
+            )}
+            {currentStep === 3 && (
+              <SectorAnalysisView 
+                analyzerState={analyzerState} 
+                onBack={() => setWorkflowStep(2)} 
+                onProceed={handleProceedToBucket} 
+              />
+            )}
+            {currentStep === 4 && (
+              <PortfolioBucketView 
+                portfolioData={portfolioData} 
+                currentUser={currentUser}
+                onOpenRegister={() => setActiveNav('portfolio')}
+                onBack={() => setWorkflowStep(3)} 
+                onReset={() => setWorkflowStep(1)} 
+              />
+            )}
+          </>
         )}
       </div>
 

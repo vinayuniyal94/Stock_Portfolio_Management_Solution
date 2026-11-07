@@ -90,4 +90,36 @@ class GuardrailsManager:
                 sanitized_profile[key] = cls.sanitize_profile(val)
         return sanitized_profile
 
+    @classmethod
+    def sanitize_pii(cls, text: str) -> str:
+        """Redacts sensitive PII from inputs before passing to agents/LLMs."""
+        if not isinstance(text, str):
+            return text
+        
+        text = cls.EMAIL_REGEX.sub("[REDACTED_EMAIL]", text)
+        text = cls.PHONE_REGEX.sub("[REDACTED_PHONE]", text)
+        text = cls.PAN_REGEX.sub("[REDACTED_PAN]", text)
+        text = cls.AADHAAR_REGEX.sub("[REDACTED_AADHAAR]", text)
+        text = cls.CREDIT_CARD_REGEX.sub("[REDACTED_CREDIT_CARD]", text)
+        
+        return text
+
+    @classmethod
+    def sanitize_profile(cls, profile: dict) -> dict:
+        """Recursively sanitizes string fields and masks names in user profile dicts to prevent PII leaks."""
+        if not isinstance(profile, dict):
+            return profile
+        
+        sanitized_profile = profile.copy()
+        for key, val in sanitized_profile.items():
+            if isinstance(val, str):
+                # If the key is an investor name, mask it for high-security telemetry/LLM calls
+                if key == "investor_name":
+                    sanitized_profile[key] = "[REDACTED_INVESTOR_NAME]"
+                else:
+                    sanitized_profile[key] = cls.sanitize_pii(val)
+            elif isinstance(val, dict):
+                sanitized_profile[key] = cls.sanitize_profile(val)
+        return sanitized_profile
+
 guardrails = GuardrailsManager()

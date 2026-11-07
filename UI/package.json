@@ -4,6 +4,7 @@
   "private": true,
   "homepage": "https://vinayuniyal94.github.io/Stock_Portfolio_Management_Solution",
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.359.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

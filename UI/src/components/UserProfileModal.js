@@ -1,159 +1,143 @@
 import React, { useState } from 'react';
-import { UserCheck, X, Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
+import { UserPlus, Lock, Mail, User } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
-export default function UserProfileModal({ isOpen, onClose, currentUser, setCurrentUser, setUserPortfolios, defaultRegister = false }) {
-  const [isRegister, setIsRegister] = useState(defaultRegister);
-  const [username, setUsername] = useState('');
+// Safe initialization with environment variables and reliable fallbacks to prevent crashes
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ivlrzhllmdhrffbaekfl.supabase.co';
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY || 'sb_publishable_nbxw94AF7wQCz8uigXQaSQ_PlfKwvDn';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export default function UserProfileModal({ isOpen, onClose, onSuccess }) {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMsg, setErrorMsg] = useState(null);
 
   if (!isOpen) return null;
 
-  const API_BASE = 'http://localhost:8000';
-
-  const handleSubmit = async (e) => {
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-    setSuccessMessage('');
+    setErrorMsg(null);
 
     try {
-      const endpoint = isRegister ? `${API_BASE}/api/auth/register` : `${API_BASE}/api/auth/login`;
-      const body = isRegister 
-        ? { username: username || email.split('@')[0], email, password }
-        : { email, password };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+      // 1. Sign up user via Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username }
+        }
       });
-      const data = await res.json();
 
-      if (res.ok) {
-        const userObj = data.user || data;
-        setCurrentUser(userObj);
-        setSuccessMessage(isRegister ? 'Account successfully created & registered!' : 'Successfully logged in!');
-        setTimeout(() => {
-          setSuccessMessage('');
-          onClose();
-        }, 1200);
-      } else {
-        throw new Error(data.detail || 'Authentication failed');
-      }
-    } catch (err) {
-      // Fallback local user creation if backend route is stubbed during development
-      const fallbackUser = {
-        id: `usr_${Date.now()}`,
-        username: username || email.split('@')[0] || 'Investor',
-        email: email || 'investor@arthveda.ai'
+      if (error) throw error;
+
+      const userSession = {
+        id: data?.user?.id || Date.now().toString(),
+        email: email,
+        username: username || email.split('@')[0]
       };
-      setCurrentUser(fallbackUser);
-      setSuccessMessage('Account registered successfully!');
-      setTimeout(() => {
-        setSuccessMessage('');
-        onClose();
-      }, 1200);
+
+      // 2. Save active user session locally
+      localStorage.setItem('arthveda_user', JSON.stringify(userSession));
+
+      // 3. Bind any pending multi-agent portfolio to this registered account vault
+      const pendingPortfolio = localStorage.getItem('arthveda_pending_portfolio');
+      if (pendingPortfolio) {
+        localStorage.setItem('arthveda_saved_portfolio', pendingPortfolio);
+      }
+
+      if (onSuccess) onSuccess(userSession);
+      onClose();
+      window.location.reload(); // Refresh to load registered state
+    } catch (err) {
+      setErrorMsg(err.message || 'Registration failed. Please check your inputs and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200 relative">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+      <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full space-y-6 border border-slate-200 relative">
         
-        <button 
-          onClick={onClose}
-          className="absolute top-6 right-6 p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-            <Sparkles className="w-5 h-5" />
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 shadow-sm">
+            <UserPlus className="w-6 h-6" />
           </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              {isRegister ? 'Create ArthVeda Account' : 'Investor Login'}
-            </h3>
-            <span className="text-xs text-slate-500 font-mono">
-              {isRegister ? 'Unlock persistent Supabase portfolio sync' : 'Access your saved wealth buckets'}
-            </span>
-          </div>
+          <h3 className="text-xl font-extrabold text-slate-900">Register Portfolio Vault</h3>
+          <p className="text-xs text-slate-500">Create your credentials to permanently save this portfolio.</p>
         </div>
 
-        {successMessage ? (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-            <span>{successMessage}</span>
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-600 p-3 rounded-xl text-xs font-mono">
+            {errorMsg}
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            {isRegister && (
-              <div>
-                <label className="block text-slate-600 font-medium mb-1">Username / Investor Name</label>
-                <input
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. vinay_uniyal"
-                  className="w-full enterprise-input rounded-xl px-4 py-3 border border-slate-200"
-                />
-              </div>
-            )}
+        )}
 
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Email Address</label>
+        <form onSubmit={handleRegisterSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-mono uppercase text-slate-500 font-bold">Username</label>
+            <div className="relative">
+              <User className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                required
+                placeholder="vinayuniyal"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-mono uppercase text-slate-500 font-bold">Email Address</label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="email"
                 required
+                placeholder="vinay@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="investor@example.com"
-                className="w-full enterprise-input rounded-xl px-4 py-3 border border-slate-200"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:border-emerald-500"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-slate-600 font-medium mb-1">Password</label>
+          <div className="space-y-1">
+            <label className="text-xs font-mono uppercase text-slate-500 font-bold">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="password"
                 required
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full enterprise-input rounded-xl px-4 py-3 border border-slate-200"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:border-emerald-500"
               />
             </div>
+          </div>
 
-            {error && <div className="text-rose-600 font-medium">{error}</div>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{isRegister ? 'Register & Save Portfolio' : 'Login to Account'}</span>
-            </button>
-          </form>
-        )}
-
-        <div className="text-center pt-2 border-t border-slate-100 text-xs">
           <button
-            type="button"
-            onClick={() => setIsRegister(!isRegister)}
-            className="text-emerald-700 font-bold hover:underline cursor-pointer"
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
           >
-            {isRegister ? 'Already have an account? Login here' : "Don't have an account? Register now"}
+            {loading ? 'Registering & Saving...' : 'Complete Registration & Save Portfolio'}
           </button>
-        </div>
+        </form>
+
+        <button
+          onClick={onClose}
+          className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-medium cursor-pointer pt-2"
+        >
+          Cancel
+        </button>
 
       </div>
     </div>

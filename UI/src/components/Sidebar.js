@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   LayoutDashboard, Bot, Calculator, Network, Briefcase, 
-  BarChart2, FileText, Cpu, PieChart, User, LogOut, ChevronUp, TrendingUp, CheckCircle2, ShieldAlert, ChevronDown, PanelLeftClose, PanelLeftOpen 
+  BarChart2, FileText, Cpu, PieChart, User, LogOut, ChevronUp, TrendingUp, CheckCircle2, ShieldAlert, ChevronDown, PanelLeftClose 
 } from 'lucide-react';
 
 export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAuth, isCollapsed, setIsCollapsed }) {
@@ -9,18 +9,21 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
   const [loggingOut, setLoggingOut] = useState(false);
   const menuRef = useRef(null);
 
-  // Accordion state: expand trial or registered depending on login state
+  // Accordion states: trial, registered, and platform analytics
   const [trialOpen, setTrialOpen] = useState(!currentUser);
   const [registeredOpen, setRegisteredOpen] = useState(Boolean(currentUser));
+  const [platformAnalyticsOpen, setPlatformAnalyticsOpen] = useState(true);
 
-  // Sync accordion open state automatically when currentUser changes
+  // Sync accordion open states automatically when currentUser changes
   useEffect(() => {
     if (currentUser) {
       setTrialOpen(false);
       setRegisteredOpen(true);
+      setPlatformAnalyticsOpen(true);
     } else {
       setTrialOpen(true);
       setRegisteredOpen(false);
+      setPlatformAnalyticsOpen(true);
     }
   }, [currentUser]);
 
@@ -58,7 +61,9 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
     { id: 'solution_guardrails', label: 'Solution Guardrails', icon: ShieldAlert, section: 'Registered Suite' },
     { id: 'rag', label: 'Document Grounding RAG', icon: FileText, section: 'Registered Suite' },
     { id: 'pipeline', label: 'Agent Pipeline Monitor', icon: Cpu, section: 'Registered Suite' },
-    { id: 'platform_analytics', label: 'Platform Analytics', icon: PieChart, section: 'Registered Suite' }
+
+    // Platform Analytics Section Item (Unlocked for everyone)
+    { id: 'platform_analytics', label: 'Platform Analytics', icon: PieChart, section: 'Platform Analytics' }
   ];
 
   return (
@@ -77,7 +82,7 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
         </div>
       )}
 
-      {/* Top Logo & Toggle: Clicking logo or toggle button expands/collapses sidebar */}
+      {/* Top Logo & Toggle */}
       <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-white z-10">
         {!isCollapsed ? (
           <div 
@@ -116,7 +121,7 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
         )}
       </div>
 
-      {/* Scrollable Navigation Area (Sidebar itself is locked, only middle content flows) */}
+      {/* Scrollable Navigation Area */}
       <div className="flex-1 px-3 py-4 space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
         
         {/* Trial Mode Section */}
@@ -200,9 +205,48 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
           )}
         </div>
 
+        {/* Platform Analytics Section (Unlocked for everyone) */}
+        <div className="space-y-1 pt-2">
+          {!isCollapsed && (
+            <button 
+              onClick={() => setPlatformAnalyticsOpen(!platformAnalyticsOpen)}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold hover:text-slate-600 cursor-pointer"
+            >
+              <span>Platform Analytics</span>
+              {platformAnalyticsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
+          {(platformAnalyticsOpen || isCollapsed) && (
+            <div className="space-y-1 pt-1 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
+              {navItems.filter(i => i.section === 'Platform Analytics').map((item) => {
+                const Icon = item.icon;
+                const isActive = activeNav === item.id;
+                return (
+                  <button
+                    key={`${item.id}_plat`}
+                    onClick={() => setActiveNav(item.id)}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'justify-between px-3.5 py-2.5'} rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                      isActive 
+                        ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 shadow-xs' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 truncate">
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {/* Footer Profile / Login Button Section (Fixed at bottom) */}
+      {/* Footer Profile / Login Button Section */}
       <div className="p-4 border-t border-slate-100 relative flex-shrink-0 bg-white z-10" ref={menuRef}>
         {currentUser ? (
           <div>

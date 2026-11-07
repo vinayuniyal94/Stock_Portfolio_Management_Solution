@@ -76,7 +76,8 @@ export default function App() {
         <UserProfileModal 
           isOpen={isAuthOpen} 
           onClose={() => setIsAuthOpen(false)} 
-          onSuccess={handleLoginSuccess} 
+          onSuccess={handleLoginSuccess}
+          setCurrentUser={setCurrentUser}
         />
       )}
 

@@ -9,7 +9,7 @@ urllib3>=2.0.0
 yfinance>=0.2.37
 huggingface_hub>=0.23.0
 openai>=1.14.0
-pinecone>=6.0.0
+pinecone
 mcp>=1.0.0
 supabase>=2.0.0
 typing-extensions>=4.10.0
