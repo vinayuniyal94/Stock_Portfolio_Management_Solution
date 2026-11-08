@@ -38,7 +38,7 @@ load_dotenv()
 # Initialize FastAPI application
 app = FastAPI(title="ArthVeda AI Wealth Management API", version="2.0.0")
 
-# Configure CORS middleware
+# Configure CORS middleware to support local and production frontend origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

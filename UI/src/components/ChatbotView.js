@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, User, Send, Sparkles, Loader2, Database, Copy, Check, RotateCcw, Cpu, Zap, Hash } from 'lucide-react';
 
+// Automatically switches between local development and Render production based on browser hostname
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : (process.env.REACT_APP_API_BASE_URL || 'https://arthveda-ai-backend.onrender.com');
+
 const COMPACT_PROMPTS = [
   "How does Beta protect portfolios?",
   "Trailing PE vs Forward PE",
@@ -49,7 +54,7 @@ export default function ChatbotView() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: textToSend })
@@ -82,7 +87,7 @@ export default function ChatbotView() {
         {
           id: `err_${Date.now()}`,
           sender: 'guru',
-          text: "Encountered difficulty connecting to `server.py` on port 8000. Please verify the backend is active.",
+          text: "Encountered difficulty connecting to backend server. Please verify the backend is active.",
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           metadata: { llm: 'offline', chunks: 0, inputTokens: 0, outputTokens: 0, latencyMs: 0 }
         }

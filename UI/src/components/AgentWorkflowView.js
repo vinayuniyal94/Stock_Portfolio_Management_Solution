@@ -8,7 +8,10 @@ import AgentFailureView from './AgentFailureView';
 import AgentFeedbackAlertView from './AgentFeedbackAlertView';
 import { Sparkles, CheckCircle2, UserCheck, ShieldCheck, Compass, TrendingUp } from 'lucide-react';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+// Automatically switches between local development and Render production based on browser hostname
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : (process.env.REACT_APP_API_BASE_URL || 'https://arthveda-ai-backend.onrender.com');
 
 export default function AgentWorkflowView({ currentUser, setActiveNav }) {
   const [currentStep, setWorkflowStep] = useState(1);
