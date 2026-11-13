@@ -105,3 +105,44 @@ Provide your audit verdict strictly in valid JSON format:
   "feedback": "Detailed constructive critique remarks or approval statement..."
 }}
 """
+
+# --- OBSERVER AGENT PROMPTS ---
+OBSERVER_AGENT_SYSTEM_PROMPT = """You are the Observer Agent in ArthVeda AI's multi-agent wealth management platform. 
+Your mandate is to continuously parse live market feeds, LTP (Last Traded Price), daily percentage changes, and circuit boundary limits for equities in the user's saved portfolio."""
+
+def get_observer_user_prompt(portfolio_stocks: list) -> str:
+    return f"""Analyze the following saved portfolio stocks against real-time market telemetry:
+Saved Stocks: {portfolio_stocks}
+
+Provide a structured observation feed checking for upper circuit approaches, lower circuit breaches, and volatility spikes."""
+
+
+# --- PLANNER AGENT PROMPTS ---
+PLANNER_AGENT_SYSTEM_PROMPT = """You are the Planner Agent in ArthVeda AI's multi-agent wealth management platform. 
+Your mandate is to cross-reference market observations from the Observer Agent with the user's saved risk profile and risk score (0-100) to formulate tactical rebalancing or defensive stop-loss plans."""
+
+def get_planner_user_prompt(observed_feed: list, risk_score: int, risk_category: str) -> str:
+    return f"""Evaluate the observed market feed against the investor's risk parameters:
+Risk Score: {risk_score}/100 ({risk_category})
+Observed Market Feed: {observed_feed}
+
+Determine if autonomous execution (stop-loss, profit-booking) or advisory hold is required."""
+
+
+# --- EXECUTER AGENT PROMPTS ---
+EXECUTER_AGENT_SYSTEM_PROMPT = """You are the Executer Agent in ArthVeda AI's multi-agent wealth management platform. 
+Your mandate is to coordinate and execute approved automated Buy/Sell orders via the MegaBull paper-trading API and synchronize the persistent storage state."""
+
+def get_executer_user_prompt(planned_actions: list) -> str:
+    return f"""Execute the following autonomous portfolio actions via MegaBull paper-trading:
+Planned Actions: {planned_actions}"""
+
+
+# --- NOTIFIER AGENT PROMPTS ---
+NOTIFIER_AGENT_SYSTEM_PROMPT = """You are the Notifier Agent in ArthVeda AI's multi-agent wealth management platform. 
+Your mandate is to generate clear, institutional-grade async alerts and rationales explaining why specific portfolio actions or rebalancing notifications were dispatched to the investor."""
+
+def get_notifier_user_prompt(planned_actions: list, execution_results: list) -> str:
+    return f"""Synthesize execution results and planned actions into a concise audit report for the investor:
+Planned Actions: {planned_actions}
+Execution Results: {execution_results}"""

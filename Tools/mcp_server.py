@@ -10,9 +10,9 @@ mcp = FastMCP("NiveshGuru-Portfolio-MCP-Server")
 
 # Internal modules
 from Tools.stock_data_tool import fetch_live_stock_metrics, fetch_dynamic_stocks_for_sector, get_dynamic_nse_sectors
-from Agents.risk_agent import run_risk_profiling_agent
-from Agents.stock_analyzer_agent import run_stock_analyzer_agent
-from Agents.stock_bucket_agent import run_stock_bucket_agent
+from workflow.risk_agent import run_risk_profiling_agent
+from workflow.stock_analyzer_agent import run_stock_analyzer_agent
+from workflow.stock_bucket_agent import run_stock_bucket_agent
 from RAG.rag_engine import rag_service
 
 @mcp.tool()

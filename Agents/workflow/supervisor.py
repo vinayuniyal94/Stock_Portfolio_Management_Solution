@@ -1,9 +1,9 @@
 from typing import TypedDict, Dict, Any, List
 from langgraph.graph import StateGraph, END
-from Agents.risk_agent import run_risk_profiling_agent
-from Agents.stock_analyzer_agent import run_stock_analyzer_agent
-from Agents.stock_bucket_agent import run_stock_bucket_agent
-from Agents.critique_agent import run_critique_agent
+from Agents.workflow.risk_agent import run_risk_profiling_agent
+from Agents.workflow.stock_analyzer_agent import run_stock_analyzer_agent
+from Agents.workflow.stock_bucket_agent import run_stock_bucket_agent
+from Agents.workflow.critique_agent import run_critique_agent
 
 class AgentWorkflowState(TypedDict):
     user_profile: Dict[str, Any]

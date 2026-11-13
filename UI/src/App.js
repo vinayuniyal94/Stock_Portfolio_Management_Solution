@@ -11,6 +11,8 @@ import AgentPipelineMonitorView from './components/AgentPipelineMonitorView';
 import PlatformAnalyticsView from './components/PlatformAnalyticsView';
 import McpIntegrationView from './components/McpIntegrationView';
 import UserProfileModal from './components/UserProfileModal';
+import AboutSolutionView from './components/AboutSolutionView';
+import SystemHealthcheckView from './components/SystemHealthcheckView';
 
 export default function App() {
   const [activeNav, setActiveNav] = useState('dashboard');
@@ -62,12 +64,23 @@ export default function App() {
         {activeNav === 'assistant' && <ChatbotView currentUser={currentUser} />}
         {activeNav === 'solution_guardrails' && <SolutionGuardrailsView />}
         {activeNav === 'calculator' && <Calculators />}
-        {activeNav === 'portfolio' && <MySavedPortfolioView currentUser={currentUser} />}
+        
+        {/* Pass onOpenAuth to MySavedPortfolioView so unregistered/unauthenticated users can trigger the modal */}
+        {activeNav === 'portfolio' && (
+          <MySavedPortfolioView 
+            currentUser={currentUser} 
+            onOpenAuth={() => setIsAuthOpen(true)} 
+            setActiveNav={setActiveNav} 
+          />
+        )}
+
         {activeNav === 'analytics' && <PortfolioAnalyticsView currentUser={currentUser} />}
         {activeNav === 'rag' && <DocumentGroundingRagView currentUser={currentUser} />}
         {activeNav === 'pipeline' && <AgentPipelineMonitorView />}
         {activeNav === 'platform_analytics' && <PlatformAnalyticsView currentUser={currentUser} />}
         {activeNav === 'mcp' && <McpIntegrationView />}
+        {activeNav === 'about_solution' && <AboutSolutionView />}
+        {activeNav === 'system_healthcheck' && <SystemHealthcheckView />}
 
       </main>
 

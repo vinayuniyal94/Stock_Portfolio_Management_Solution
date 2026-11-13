@@ -3,19 +3,21 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, 
   LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid 
 } from 'recharts';
-import { PieChart as PieIcon, IndianRupee, Sparkles, TrendingUp, Info, X, ArrowLeft, RotateCcw } from 'lucide-react';
+import { PieChart as PieIcon, IndianRupee, Sparkles, TrendingUp, Info, X, ArrowLeft, RotateCcw, Briefcase, CheckCircle2, Loader2 } from 'lucide-react';
 
 const COLORS = [
   '#059669', '#10b981', '#34d399', '#6ee7b7', 
   '#047857', '#065f46', '#a7f3d0', '#0284c7', '#38bdf8', '#818cf8', '#c084fc'
 ];
 
-export default function PortfolioBucketView({ portfolioData, currentUser, onOpenRegister, onBack, onReset }) {
+export default function PortfolioBucketView({ portfolioData, currentUser, onOpenRegister, onBack, onReset, setActiveNav }) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef(null);
 
-  // Debug backend response payload
-  console.log('PortfolioBucketView received portfolioData:', portfolioData);
+  // Saving / MegaBull sync state
+  const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   // Comprehensive extraction across all possible backend keys and nested responses
   const rawPortfolio = 
@@ -56,7 +58,50 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 1. Properly aggregate allocation data by sector for all sectors
+  // Save portfolio to Supabase & MegaBull API handler for logged-in users
+  const handleSavePortfolioToMegaBull = async () => {
+    if (!currentUser) {
+      if (onOpenRegister) onOpenRegister();
+      return;
+    }
+
+    setSaving(true);
+    setErrorMsg(null);
+
+    try {
+      const payload = {
+        user_id: currentUser.id,
+        portfolio_name: archetype || "AI Core Wealth Portfolio",
+        bucket_archetype: archetype || "All-Weather Balanced Core",
+        risk_score: portfolioData?.risk_score || 65,
+        risk_category: portfolioData?.risk_category || "Moderate",
+        initial_investment: initialCapital,
+        portfolio_json: portfolioData
+      };
+
+      const res = await fetch('http://localhost:8000/api/portfolio/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      const resData = await res.json();
+      if (res.ok) {
+        setSavedSuccess(true);
+        setTimeout(() => {
+          if (setActiveNav) setActiveNav('portfolio');
+        }, 1200);
+      } else {
+        throw new Error(resData.detail || "Failed to save portfolio to database and MegaBull API.");
+      }
+    } catch (err) {
+      setErrorMsg(err.message || "An unexpected error occurred.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Sector aggregation
   const sectorMap = {};
   portfolio.forEach((stock) => {
     const secName = stock.sector;
@@ -68,7 +113,6 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
     value: sectorMap[sector]
   }));
 
-  // 2. Generate 5-Year Projected Growth vs Nifty 50 Benchmark Data
   const cagrValue = parseFloat(targetCagr) / 100 || 0.165;
   const growthData = [];
   let portVal = initialCapital;
@@ -84,7 +128,6 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
     niftyVal *= (1 + 0.12);
   }
 
-  // 3. Format raw thesis text into clean bullet points
   const rawThesis = portfolioData?.portfolio_thesis || portfolioData?.thesis || portfolioData?.summary ||
     "This curated portfolio optimizes risk-adjusted returns by balancing high-beta structural growth engines with defensive cash-flow generators.";
   
@@ -93,7 +136,7 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
     .filter((sentence) => sentence.trim().length > 0);
 
   return (
-    <div className="w-full space-y-6 animate-in fade-in duration-200">
+    <div className="w-full space-y-6 animate-in fade-in duration-200 pb-12">
       
       {/* Top Action Header Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 sm:px-6 rounded-3xl border border-slate-200 shadow-sm">
@@ -106,13 +149,22 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
         </button>
 
         <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          {!currentUser && (
+          {!currentUser ? (
             <button
               onClick={onOpenRegister}
               className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 shadow-sm shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Register to Buy / Save Portfolio</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleSavePortfolioToMegaBull}
+              disabled={saving || savedSuccess}
+              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Briefcase className="w-4 h-4" />}
+              <span>{saving ? 'Syncing MegaBull & Supabase...' : 'Save Portfolio & Execute Orders'}</span>
             </button>
           )}
           <button
@@ -125,10 +177,21 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
         </div>
       </div>
 
-      {/* Top 3 Card Chart & Metric View */}
+      {errorMsg && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-mono rounded-2xl">
+          {errorMsg}
+        </div>
+      )}
+
+      {savedSuccess && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-mono rounded-2xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span>Successfully synced with MegaBull API & saved to Supabase! Redirecting to your portfolio vault...</span>
+        </div>
+      )}
+
+      {/* Top Cards Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-        
-        {/* Card 1: Sector Allocation Pie Chart */}
         <div className="enterprise-card rounded-3xl p-5 flex flex-col justify-between bg-white shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
@@ -146,40 +209,22 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={60}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={30} outerRadius={60} paddingAngle={2} dataKey="value">
                     {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip 
-                    formatter={(val) => `₹${Number(val).toLocaleString('en-IN')}`}
-                    contentStyle={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '11px' }}
-                  />
+                  <RechartsTooltip formatter={(val) => `₹${Number(val).toLocaleString('en-IN')}`} contentStyle={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '11px' }} />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </div>
-          <div className="text-[10px] text-slate-500 font-mono text-center truncate">
-            Fully linked across all macroeconomic pillars
-          </div>
         </div>
 
-        {/* Card 2: Combined Capital Deployed & Target Compounding Metric */}
         <div className="enterprise-card rounded-3xl p-6 flex flex-col justify-between bg-white shadow-sm border border-slate-200">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
               <IndianRupee className="w-3.5 h-3.5 text-emerald-600" /> Capital & Compounding
-            </span>
-            <span className="text-[10px] font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
-              SEBI Fiduciary
             </span>
           </div>
           <div className="my-2 space-y-2">
@@ -192,19 +237,13 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
               <span className="text-lg font-extrabold font-mono text-emerald-700">{targetCagr}</span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-mono">
-            <span className="text-slate-500">Horizon:</span>
-            <strong className="text-slate-800">5-7 Years Core</strong>
-          </div>
         </div>
 
-        {/* Card 3: 5-Year Growth Line Chart */}
         <div className="enterprise-card rounded-3xl p-5 flex flex-col justify-between bg-white shadow-sm border border-slate-200">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-600" /> 5-Yr Growth vs Nifty 50
             </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </div>
           <div className="w-full h-36">
             <ResponsiveContainer width="100%" height="100%">
@@ -212,26 +251,17 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="year" tick={{ fontSize: 9, fill: '#64748b' }} />
                 <YAxis tick={{ fontSize: 9, fill: '#64748b' }} tickFormatter={(val) => `₹${(val / 100000).toFixed(1)}L`} />
-                <RechartsTooltip 
-                  formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
-                  contentStyle={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '10px' }}
-                />
+                <RechartsTooltip formatter={(val) => [`₹${Number(val).toLocaleString('en-IN')}`, '']} contentStyle={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: '12px', fontSize: '10px' }} />
                 <Line type="monotone" dataKey="Portfolio" stroke="#059669" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="Nifty50" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="3 3" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex items-center justify-center gap-4 text-[10px] font-mono text-slate-500 mt-1">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-600" /> Portfolio</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" /> Nifty 50 Benchmark</span>
-          </div>
         </div>
-
       </div>
 
-      {/* Recommended Stocks Table Section */}
+      {/* Holdings Table Section */}
       <div className="enterprise-card rounded-3xl p-6 sm:p-8 space-y-5 bg-white shadow-sm border border-slate-200 w-full relative">
-        
         <div className="border-b border-slate-100 pb-4 flex items-center justify-between">
           <div>
             <span className="text-[9px] font-mono tracking-widest uppercase text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -242,48 +272,36 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
             </h3>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative" ref={popoverRef}>
-              <button
-                onClick={() => setShowPopover(!showPopover)}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-all shadow-xs cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>AI Portfolio Rationale</span>
-              </button>
+          <div className="relative" ref={popoverRef}>
+            <button
+              onClick={() => setShowPopover(!showPopover)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-all shadow-xs cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>AI Portfolio Rationale</span>
+            </button>
 
-              {showPopover && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl p-5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
-                        <Info className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-bold text-slate-900 text-xs font-mono uppercase tracking-wider">Strategy Thesis</span>
-                    </div>
-                    <button 
-                      onClick={() => setShowPopover(false)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {rationalePoints.map((point, idx) => (
-                      <li key={idx} className="flex items-start space-x-2 text-xs text-slate-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1.5 flex-shrink-0" />
-                        <span className="leading-relaxed font-medium">{point.trim()}</span>
-                      </li>
-                    ))}
-                  </ul>
+            {showPopover && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl p-5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-bold text-slate-900 text-xs font-mono uppercase tracking-wider">Strategy Thesis</span>
+                  <button onClick={() => setShowPopover(false)} className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
-            </div>
+                <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {rationalePoints.map((point, idx) => (
+                    <li key={idx} className="flex items-start space-x-2 text-xs text-slate-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-1.5 flex-shrink-0" />
+                      <span className="leading-relaxed font-medium">{point.trim()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Holdings Table */}
         <div className="overflow-x-auto border border-slate-200 rounded-2xl">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-mono text-[10px] uppercase tracking-wider">
@@ -298,31 +316,22 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-              {portfolio.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-12 text-center text-slate-400 font-mono">
-                    {portfolioData?.error || "Awaiting live agent output from Stock Bucket Agent..."}
+              {portfolio.map((stock, idx) => (
+                <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3.5 font-mono text-slate-400">{stock.id}</td>
+                  <td className="p-3.5 font-bold text-slate-900">
+                    {stock.name} <span className="text-[10px] font-mono text-slate-400 block">{stock.ticker}</span>
                   </td>
+                  <td className="p-3.5 text-slate-600">{stock.sector}</td>
+                  <td className="p-3.5 text-right font-mono">₹{stock.current_price?.toLocaleString('en-IN')}</td>
+                  <td className="p-3.5 text-right font-mono font-bold text-emerald-700">{stock.units}</td>
+                  <td className="p-3.5 text-right font-mono">₹{stock.allocated_amount?.toLocaleString('en-IN')} ({stock.allocation_percentage}%)</td>
+                  <td className="p-3.5 text-right font-mono text-slate-600">{stock.beta}</td>
                 </tr>
-              ) : (
-                portfolio.map((stock, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3.5 font-mono text-slate-400">{stock.id}</td>
-                    <td className="p-3.5 font-bold text-slate-900">
-                      {stock.name} <span className="text-[10px] font-mono text-slate-400 block">{stock.ticker}</span>
-                    </td>
-                    <td className="p-3.5 text-slate-600">{stock.sector}</td>
-                    <td className="p-3.5 text-right font-mono">₹{stock.current_price?.toLocaleString('en-IN')}</td>
-                    <td className="p-3.5 text-right font-mono font-bold text-emerald-700">{stock.units}</td>
-                    <td className="p-3.5 text-right font-mono">₹{stock.allocated_amount?.toLocaleString('en-IN')} ({stock.allocation_percentage}%)</td>
-                    <td className="p-3.5 text-right font-mono text-slate-600">{stock.beta}</td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-
       </div>
 
     </div>

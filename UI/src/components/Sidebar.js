@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   LayoutDashboard, Bot, Calculator, Network, Briefcase, 
-  BarChart2, FileText, Cpu, PieChart, User, LogOut, ChevronUp, TrendingUp, CheckCircle2, ShieldAlert, ChevronDown, PanelLeftClose 
+  BarChart2, FileText, Cpu, PieChart, User, LogOut, ChevronUp, TrendingUp, CheckCircle2, ShieldAlert, ChevronDown, PanelLeftClose, ShieldCheck 
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://ivlrzhllmdhrffbaekfl.supabase.co';
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY || 'sb_publishable_nbxw94AF7wQCz8uigXQaSQ_PlfKwvDn';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAuth, isCollapsed, setIsCollapsed }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -38,9 +43,16 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setLoggingOut(true);
     setShowProfileMenu(false);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Supabase signOut error:", err);
+    }
+    localStorage.removeItem('arthveda_user');
+    localStorage.removeItem('arthveda_saved_portfolio');
     setTimeout(() => {
       window.location.reload(); 
     }, 900);
@@ -62,8 +74,10 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
     { id: 'rag', label: 'Document Grounding RAG', icon: FileText, section: 'Registered Suite' },
     { id: 'pipeline', label: 'Agent Pipeline Monitor', icon: Cpu, section: 'Registered Suite' },
 
-    // Platform Analytics Section Item (Unlocked for everyone)
-    { id: 'platform_analytics', label: 'Platform Analytics', icon: PieChart, section: 'Platform Analytics' }
+    // Platform Analytics & Telemetry Section Items (Unlocked for everyone)
+    { id: 'platform_analytics', label: 'Platform Analytics', icon: PieChart, section: 'Platform Analytics' },
+    { id: 'about_solution', label: 'About Solution', icon: FileText, section: 'Platform Analytics' },
+    { id: 'system_healthcheck', label: 'System Healthcheck', icon: ShieldCheck, section: 'Platform Analytics' }
   ];
 
   return (
