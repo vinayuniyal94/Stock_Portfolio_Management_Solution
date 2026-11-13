@@ -64,7 +64,6 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
     { id: 'assistant', label: 'ArthVeda AI Assistant', icon: Bot, section: 'Trial Mode' },
     { id: 'solution_guardrails', label: 'Solution Guardrails', icon: ShieldAlert, section: 'Trial Mode' },
     { id: 'calculator', label: 'Calculators', icon: Calculator, section: 'Trial Mode' },
-    { id: 'mcp', label: 'MCP Integration', icon: Network, section: 'Trial Mode' },
 
     // Registered Suite Items
     { id: 'portfolio', label: 'My Saved Portfolio', icon: Briefcase, section: 'Registered Suite' },
@@ -76,6 +75,7 @@ export default function Sidebar({ activeNav, setActiveNav, currentUser, onOpenAu
 
     // Platform Analytics & Telemetry Section Items (Unlocked for everyone)
     { id: 'platform_analytics', label: 'Platform Analytics', icon: PieChart, section: 'Platform Analytics' },
+    { id: 'mcp', label: 'MCP Integration', icon: Network, section: 'Platform Analytics' },
     { id: 'about_solution', label: 'About Solution', icon: FileText, section: 'Platform Analytics' },
     { id: 'system_healthcheck', label: 'System Healthcheck', icon: ShieldCheck, section: 'Platform Analytics' }
   ];

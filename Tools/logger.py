@@ -2,6 +2,17 @@ import time
 from typing import Optional, Dict, Any
 import json
 
+# Add at the top of Tools/logger.py
+import os
+
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+
 try:
     import tiktoken
     _enc = tiktoken.get_encoding("cl100k_base")

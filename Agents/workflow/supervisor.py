@@ -1,9 +1,14 @@
 from typing import TypedDict, Dict, Any, List
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
+from Tools.logger import traceable
 from Agents.workflow.risk_agent import run_risk_profiling_agent
 from Agents.workflow.stock_analyzer_agent import run_stock_analyzer_agent
 from Agents.workflow.stock_bucket_agent import run_stock_bucket_agent
 from Agents.workflow.critique_agent import run_critique_agent
+
+load_dotenv(override=True)
+
 
 class AgentWorkflowState(TypedDict):
     user_profile: Dict[str, Any]
@@ -21,7 +26,9 @@ class AgentWorkflowState(TypedDict):
     critique_feedback: str      
     critique_confidence: int    
     needs_revision: bool        
+    workflow_failed: bool
     current_step: str
+
 
 def route_after_critique(state: AgentWorkflowState):
     needs_revision = state.get("needs_revision", False)
@@ -43,6 +50,7 @@ def route_after_critique(state: AgentWorkflowState):
         return END
 
     return END
+
 
 def build_portfolio_graph():
     workflow = StateGraph(AgentWorkflowState)
@@ -70,4 +78,11 @@ def build_portfolio_graph():
 
     return workflow.compile()
 
+
 graph_executor = build_portfolio_graph()
+
+
+@traceable(name="ArthVeda_Advisory_LangGraph_Run", run_type="chain")
+def invoke_advisory_workflow(initial_state: dict) -> dict:
+    """Traced entry point for full LangGraph workflow invocations."""
+    return graph_executor.invoke(initial_state)

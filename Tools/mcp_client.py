@@ -3,8 +3,9 @@ import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+
 async def run_client_demo():
-    # Configure connection to our local mcp_server.py
+    # Configure connection to local mcp_server.py
     server_params = StdioServerParameters(
         command=sys.executable,
         args=["mcp_server.py"],
@@ -12,7 +13,7 @@ async def run_client_demo():
     )
 
     print("\n" + "=" * 80)
-    print(" [MCP CLIENT]: Connecting to NiveshGuru MCP Server...")
+    print(" [MCP CLIENT]: Connecting to ArthVeda AI MCP Server...")
     print("=" * 80)
 
     async with stdio_client(server_params) as (read, write):
@@ -25,9 +26,10 @@ async def run_client_demo():
             tools_list = await session.list_tools()
             print(f"\n Available Exposed Tools ({len(tools_list.tools)}):")
             for t in tools_list.tools:
-                print(f"   • {t.name}: {t.description.splitlines()[0]}")
+                first_line = t.description.strip().splitlines()[0] if t.description else ""
+                print(f"   • {t.name}: {first_line}")
 
-            # 3. Test Tool: Live NSE Quote
+            # 3. Test Tool: Live Indian Stock API Quote
             print("\n--- [Calling Tool: get_live_stock_fundamentals ('TCS.NS')] ---")
             res_stock = await session.call_tool("get_live_stock_fundamentals", {"ticker": "TCS.NS"})
             print(res_stock.content[0].text)
@@ -37,16 +39,20 @@ async def run_client_demo():
             res_rag = await session.call_tool("search_stock_education", {"query": "What is Beta ratio?"})
             print(res_rag.content[0].text)
 
-            # 5. Test Tool: Full Portfolio Generation
+            # 5. Test Tool: Full End-to-End Portfolio Generation (Risk -> Analyzer -> Bucket)
             print("\n--- [Calling Tool: generate_asset_allocation] ---")
             res_portfolio = await session.call_tool("generate_asset_allocation", {
                 "investor_name": "Third-Party Agent User",
                 "age": 30,
                 "initial_investment_inr": 250000,
-                "risk_score": 75,
-                "horizon": "5-7 Years"
+                "horizon": "5-7 Years",
+                "employment_stability": "High",
+                "income_slab": "₹15L - ₹25L",
+                "primary_goal": "Wealth Creation",
+                "cagr_expectation": "14-16%"
             })
-            print(res_portfolio.content[0].text[:400] + "\n... (truncated)")
+            print(res_portfolio.content[0].text[:600] + "\n... (truncated)")
+
 
 if __name__ == "__main__":
     asyncio.run(run_client_demo())

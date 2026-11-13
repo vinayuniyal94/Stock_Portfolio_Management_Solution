@@ -1,5 +1,5 @@
 import json
-from Tools.logger import log_agent_start, log_critique_event
+from Tools.logger import log_agent_start, log_critique_event, traceable
 from Tools.llm_tool import query_llm_with_fallback
 from Prompts.prompt_templates import (
     CRITIQUE_AGENT_SYSTEM_PROMPT,
@@ -7,6 +7,8 @@ from Prompts.prompt_templates import (
 )
 from Tools.guardrails import guardrails
 
+
+@traceable(name="Validate_Sector_Stock_Mapping", run_type="tool")
 def validate_sector_stock_mapping(market_data: dict) -> list:
     """
     Strictly checks for cross-contamination of stocks inside incorrect sectors.
@@ -27,7 +29,6 @@ def validate_sector_stock_mapping(market_data: dict) -> list:
         if "consumer" in sec_lower or "staple" in sec_lower or "fmcg" in sec_lower:
             for st in stocks:
                 ticker = str(st.get("ticker", "")).upper()
-                name = str(st.get("name", "")).upper()
                 if any(bad in ticker for bad in consumer_staples_forbidden):
                     violations.append(f"Cross-contamination detected: Stock '{ticker}' does not belong to {sector}.")
                     
@@ -40,6 +41,7 @@ def validate_sector_stock_mapping(market_data: dict) -> list:
                     
     return violations
 
+
 def validate_pii_compliance(user_profile: dict) -> list:
     """Audits whether raw PII is present in the active state payload."""
     violations = []
@@ -48,6 +50,8 @@ def validate_pii_compliance(user_profile: dict) -> list:
         pass
     return violations
 
+
+@traceable(name="CRO_Critique_Agent", run_type="chain")
 def run_critique_agent(state: dict) -> dict:
     last_agent = state.get("last_agent", "stock_analyzer")
     critique_iterations = state.get("critique_iterations", 0)

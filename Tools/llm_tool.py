@@ -3,19 +3,28 @@ import json
 import time
 from dotenv import load_dotenv
 from openai import OpenAI
-from Tools.logger import log_llm_call
+from Tools.logger import log_llm_call, traceable
 from Tools.network_tool import probe_openai_reachability
 
-load_dotenv()
+load_dotenv(override=True)
 
-# Initialize OpenAI client if token exists
+try:
+    from langsmith.wrappers import wrap_openai
+except ImportError:
+    def wrap_openai(client):
+        return client
+
+# Initialize OpenAI client wrapped for LangSmith observability
 _openai_client = None
 if os.getenv("OPENAI_API_KEY") and "placeholder" not in os.getenv("OPENAI_API_KEY"):
     try:
-        _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        raw_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _openai_client = wrap_openai(raw_client)
     except Exception:
         _openai_client = None
 
+
+@traceable(name="OpenAI_LLM_Call", run_type="llm")
 def query_llm_with_fallback(
     system_prompt: str,
     user_prompt: str,
@@ -25,8 +34,8 @@ def query_llm_with_fallback(
     expect_json: bool = False
 ) -> str:
     """
-    Executes OpenAI exclusively as the primary LLM provider.
-    No Hugging Face dependencies or fallbacks.
+    Executes OpenAI exclusively as the primary LLM provider with full
+    LangSmith tracing and CLI observability logging.
     """
     openai_key = os.getenv("OPENAI_API_KEY")
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

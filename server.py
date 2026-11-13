@@ -1,16 +1,20 @@
 import os
 import sys
+import time
+from dotenv import load_dotenv
 
 # Ensure the root directory is explicitly appended to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+# Load environment variables first so LangSmith & API keys initialize before module imports
+load_dotenv(override=True)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from dotenv import load_dotenv
 import requests
 
 # 1. Import Workflow Agents from Agents.workflow package
@@ -40,9 +44,7 @@ except ImportError as e:
     print(f"[ERROR importing rag_engine from RAG folder]: {e}")
     rag_engine = None
 
-from Tools.logger import log_agent_start
-
-load_dotenv()
+from Tools.logger import log_agent_start, traceable
 
 # Initialize FastAPI application
 app = FastAPI(title="ArthVeda AI Wealth Management API", version="2.0.0")
@@ -59,15 +61,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class ProfileRequest(BaseModel):
     user_profile: dict
+
 
 class WorkflowRequest(BaseModel):
     step: str
     user_profile: Optional[Dict[str, Any]] = None
     risk_score: Optional[int] = None
+    risk_category: Optional[str] = None
     selected_sectors: Optional[list] = None
     market_data: Optional[Dict[str, Any]] = None
+
 
 class SavePortfolioRequest(BaseModel):
     user_id: str
@@ -78,9 +84,11 @@ class SavePortfolioRequest(BaseModel):
     initial_investment: float
     portfolio_json: dict
 
+
 @app.get("/")
 def read_root():
     return {"status": "online", "platform": "ArthVeda AI Multiagentic Wealth Management Suite"}
+
 
 # --- Portfolio Persistence & MegaBull Integration Endpoints ---
 
@@ -93,14 +101,14 @@ async def save_user_portfolio(payload: SavePortfolioRequest):
     try:
         stocks = payload.portfolio_json.get("portfolio", [])
         megabull_results = []
-        
+
         megabull_base_url = os.getenv("MEGABULL_BASE_URL", "https://api.megabull.in")
         megabull_api_key = os.getenv("MEGABULL_API_KEY", "")
         headers = {
             "api-key": megabull_api_key,
             "Content-Type": "application/json"
         }
-        
+
         # Dispatch orders to MegaBull for each stock
         for stock in stocks:
             ticker = stock.get("ticker") or stock.get("Symbol")
@@ -112,7 +120,12 @@ async def save_user_portfolio(payload: SavePortfolioRequest):
                     "quantity": qty,
                     "order_type": "MARKET"
                 }
-                mb_res = requests.post(f"{megabull_base_url}/api/orders/execute", json=order_payload, headers=headers, timeout=4)
+                mb_res = requests.post(
+                    f"{megabull_base_url}/api/orders/execute",
+                    json=order_payload,
+                    headers=headers,
+                    timeout=4
+                )
                 if mb_res.status_code == 200:
                     megabull_results.append({"ticker": ticker, "status": "Synced with MegaBull"})
                 else:
@@ -141,6 +154,7 @@ async def save_user_portfolio(payload: SavePortfolioRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save portfolio: {str(e)}")
 
+
 @app.get("/api/portfolio/{user_id}")
 @app.get("/api/portfolios/{user_id}")
 async def get_user_portfolios(user_id: str):
@@ -149,16 +163,18 @@ async def get_user_portfolios(user_id: str):
         from health_service import supabase
         if not supabase:
             return {"portfolios": []}
-        
+
         res = supabase.from_("user_portfolios").select("*").eq("user_id", user_id).execute()
         return {"portfolios": res.data or []}
     except Exception as e:
         print(f"[Fetch Portfolios Error]: {e}")
         return {"portfolios": []}
 
+
 # --- Active Multi-Agent Surveillance Endpoint (Powered by Portfolio LangGraph) ---
 
 @app.post("/api/agents/active-portfolio-monitor")
+@traceable(name="Active_Portfolio_Surveillance_Run", run_type="chain")
 async def run_active_portfolio_monitor(payload: dict):
     """
     Triggers the Observer -> Planner -> Executer -> Notifier portfolio LangGraph 
@@ -166,15 +182,15 @@ async def run_active_portfolio_monitor(payload: dict):
     """
     stocks = payload.get("stocks", [])
     risk_score = int(payload.get("risk_score", 65))
-    
+
     if not stocks:
         return {"status": "error", "message": "No portfolio stocks provided for active monitoring."}
-    
+
     if portfolio_graph_executor:
         initial_state = {
             "stocks": stocks,
             "risk_score": risk_score,
-            "risk_category": "Aggressive" if risk_score > 70 else ("Conservative" if risk_score < 40 else "Moderate"),
+            "risk_category": "Aggressive" if risk_score >= 75 else ("Conservative" if risk_score < 45 else "Moderate"),
             "observer_feed": [],
             "planned_actions": [],
             "execution_summary": [],
@@ -183,13 +199,9 @@ async def run_active_portfolio_monitor(payload: dict):
         }
         result = portfolio_graph_executor.invoke(initial_state)
         return result
-    
-    return {
-        "observer_feed": [{"ticker": s.get("ticker"), "change_pct": 0.5, "is_upper_limit": False, "is_lower_limit": False} for s in stocks],
-        "planned_actions": [{"ticker": s.get("ticker"), "action": "HOLD", "mode": "advisory", "reason": "Stable volatility range."} for s in stocks],
-        "execution_summary": [{"ticker": s.get("ticker"), "status": "COMPLETED", "message": "No action required."} for s in stocks],
-        "notifications": [{"ticker": s.get("ticker"), "action": "HOLD", "reason": "Within risk parameters.", "execution_status": "COMPLETED"} for s in stocks]
-    }
+
+    return {"status": "error", "message": "Portfolio graph executor is not initialized."}
+
 
 # --- Workflow Endpoints ---
 
@@ -198,14 +210,15 @@ def run_risk_profiler_endpoint(req: ProfileRequest):
     try:
         initial_state = {"user_profile": req.user_profile, "critique_iterations": 0}
         state = run_risk_profiling_agent(initial_state)
-        for _ in range(2):
+        for _ in range(3):
             state = run_critique_agent(state)
-            if not state.get("needs_revision", False):
+            if state.get("workflow_failed", False) or not state.get("needs_revision", False):
                 break
             state = run_risk_profiling_agent(state)
         return state
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/agent/stock-analyzer")
 def run_stock_analyzer_endpoint(req: ProfileRequest):
@@ -217,20 +230,24 @@ def run_stock_analyzer_endpoint(req: ProfileRequest):
             "critique_iterations": 0
         }
         state = run_stock_analyzer_agent(initial_state)
-        for _ in range(2):
+        for _ in range(3):
             state = run_critique_agent(state)
-            if not state.get("needs_revision", False):
+            if state.get("workflow_failed", False) or not state.get("needs_revision", False):
                 break
             state = run_stock_analyzer_agent(state)
         return state
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/agent/stock-bucket")
 def run_stock_bucket_endpoint(req: ProfileRequest):
     try:
-        log_agent_start("Full LangGraph Workflow", "Executing ReAct Risk Profiler -> Stock Analyzer -> Stock Bucket -> CRO Critique Gatekeeper Loop")
-        
+        log_agent_start(
+            "Full LangGraph Workflow",
+            "Executing ReAct Risk Profiler -> Stock Analyzer -> Stock Bucket -> CRO Critique Gatekeeper Loop"
+        )
+
         initial_state = {
             "user_profile": req.user_profile,
             "risk_score": req.user_profile.get("risk_score", 65),
@@ -239,80 +256,95 @@ def run_stock_bucket_endpoint(req: ProfileRequest):
             "market_data": req.user_profile.get("market_data", {}),
             "critique_iterations": 0
         }
-        
+
         final_state = graph_executor.invoke(initial_state)
         return final_state.get("final_portfolio", final_state)
     except Exception as e:
         print(f"[Graph Execution Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/run-workflow")
+@traceable(name="ArthVeda_HITL_Workflow_Step", run_type="chain")
 def run_workflow_endpoint(payload: WorkflowRequest):
     try:
         step = payload.step
         profile = payload.user_profile or {}
-        
+        resolved_category = (
+            payload.risk_category
+            or profile.get("risk_category")
+            or profile.get("stated_risk_appetite")
+            or "Moderate"
+        )
+
         if step == "risk_profiler":
             state = {"user_profile": profile, "critique_iterations": 0}
             state = run_risk_profiling_agent(state)
             for _ in range(3):
                 state = run_critique_agent(state)
-                if state.get("workflow_failed", False):
-                    break
-                if not state.get("needs_revision", False):
+                if state.get("workflow_failed", False) or not state.get("needs_revision", False):
                     break
                 state = run_risk_profiling_agent(state)
             return state
-            
+
         elif step == "stock_analyzer":
             state = {
                 "user_profile": profile,
                 "risk_score": payload.risk_score or 65,
-                "risk_category": profile.get("stated_risk_appetite", "Moderate"),
+                "risk_category": resolved_category,
                 "critique_iterations": 0
             }
             state = run_stock_analyzer_agent(state)
             for _ in range(3):
                 state = run_critique_agent(state)
-                if state.get("workflow_failed", False):
-                    break
-                if not state.get("needs_revision", False):
+                if state.get("workflow_failed", False) or not state.get("needs_revision", False):
                     break
                 state = run_stock_analyzer_agent(state)
             return state
-            
+
         elif step == "stock_bucket":
-            initial_state = {
+            state = {
                 "user_profile": profile,
                 "risk_score": payload.risk_score or 65,
-                "risk_category": profile.get("stated_risk_appetite", "Moderate"),
+                "risk_category": resolved_category,
                 "selected_sectors": payload.selected_sectors or [],
                 "market_data": payload.market_data or {},
                 "critique_iterations": 0
             }
-            final_state = graph_executor.invoke(initial_state)
-            return final_state.get("final_portfolio", final_state)
-            
+            state = run_stock_bucket_agent(state)
+            for _ in range(3):
+                state = run_critique_agent(state)
+                if state.get("workflow_failed", False) or not state.get("needs_revision", False):
+                    break
+                state = run_stock_bucket_agent(state)
+
+            if state.get("workflow_failed", False):
+                return state
+            return state.get("final_portfolio", state)
+
         raise HTTPException(status_code=400, detail=f"Unknown workflow step: {step}")
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[Workflow Execution Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 # Robust Chat Assistant Endpoint connected to real Pinecone RAG engine
 @app.post("/api/chat")
+@traceable(name="ArthVeda_RAG_Chat_Endpoint", run_type="chain")
 def chat_assistant_endpoint(payload: dict):
     try:
         user_message = (
-            payload.get("message") or 
-            payload.get("query") or 
-            payload.get("text") or 
-            ""
+            payload.get("message")
+            or payload.get("query")
+            or payload.get("text")
+            or ""
         )
-        
+
         if not user_message:
             raise HTTPException(status_code=400, detail="Message content cannot be empty.")
 
-        import time
         start_time = time.time()
 
         if rag_engine:
@@ -327,7 +359,7 @@ def chat_assistant_endpoint(payload: dict):
         return {
             "response": answer,
             "metadata": {
-                "llm": "gpt-4o-mini",
+                "llm": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
                 "chunks": chunks_count,
                 "inputTokens": len(user_message) * 2,
                 "outputTokens": len(answer) * 2,
@@ -335,44 +367,17 @@ def chat_assistant_endpoint(payload: dict):
             },
             "status": "success"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[Chat Assistant Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/agents/active-portfolio-monitor")
-async def run_active_portfolio_monitor(payload: dict):
-    """
-    Triggers the Observer -> Planner -> Executer -> Notifier portfolio LangGraph 
-    surveillance workflow against live MegaBull market data.
-    """
-    stocks = payload.get("stocks", [])
-    risk_score = int(payload.get("risk_score", 65))
-    
-    if not stocks:
-        return {"status": "error", "message": "No portfolio stocks provided for active monitoring."}
-    
-    if portfolio_graph_executor:
-        initial_state = {
-            "stocks": stocks,
-            "risk_score": risk_score,
-            "risk_category": "Aggressive" if risk_score > 70 else ("Conservative" if risk_score < 40 else "Moderate"),
-            "observer_feed": [],
-            "planned_actions": [],
-            "execution_summary": [],
-            "notifications": [],
-            "current_step": "Initializing portfolio surveillance graph..."
-        }
-        # Executes the actual LangGraph multi-agent pipeline
-        result = portfolio_graph_executor.invoke(initial_state)
-        return result
-    
-    return {"status": "error", "message": "Portfolio graph executor is not initialized."}
-
 
 
 @app.get("/api/health")
 def get_system_health():
     return health_service.check_all()
+
 
 if __name__ == "__main__":
     import uvicorn
