@@ -3,14 +3,18 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, 
   LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid 
 } from 'recharts';
-import { PieChart as PieIcon, IndianRupee, Sparkles, TrendingUp, Info, X, ArrowLeft, RotateCcw, Briefcase, CheckCircle2, Loader2 } from 'lucide-react';
+import { PieChart as PieIcon, IndianRupee, Sparkles, TrendingUp, X, ArrowLeft, RotateCcw, Briefcase, CheckCircle2, Loader2 } from 'lucide-react';
+
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : (process.env.REACT_APP_API_BASE_URL || 'https://arthveda-ai-backend.onrender.com');
 
 const COLORS = [
   '#059669', '#10b981', '#34d399', '#6ee7b7', 
   '#047857', '#065f46', '#a7f3d0', '#0284c7', '#38bdf8', '#818cf8', '#c084fc'
 ];
 
-export default function PortfolioBucketView({ portfolioData, currentUser, onOpenRegister, onBack, onReset, setActiveNav }) {
+export default function PortfolioBucketView({ portfolioData, riskState, currentUser, onOpenRegister, onBack, onReset, setActiveNav }) {
   const [showPopover, setShowPopover] = useState(false);
   const popoverRef = useRef(null);
 
@@ -47,6 +51,13 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
   const targetCagr = portfolioData?.target_cagr || portfolioData?.cagr || '16.5%';
   const archetype = portfolioData?.bucket_archetype || portfolioData?.archetype || 'Aggressive Alpha Growth';
 
+  // Resolve exact risk score & category from Risk Profiler / Stock Bucket state
+  const resolvedRiskScore = Number(
+    portfolioData?.risk_score ?? riskState?.risk_score ?? 65
+  );
+  const resolvedRiskCategory =
+    portfolioData?.risk_category || riskState?.risk_category || 'Moderate';
+
   // Close popover on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -73,13 +84,17 @@ export default function PortfolioBucketView({ portfolioData, currentUser, onOpen
         user_id: currentUser.id,
         portfolio_name: archetype || "AI Core Wealth Portfolio",
         bucket_archetype: archetype || "All-Weather Balanced Core",
-        risk_score: portfolioData?.risk_score || 65,
-        risk_category: portfolioData?.risk_category || "Moderate",
+        risk_score: resolvedRiskScore,
+        risk_category: resolvedRiskCategory,
         initial_investment: initialCapital,
-        portfolio_json: portfolioData
+        portfolio_json: {
+          ...portfolioData,
+          risk_score: resolvedRiskScore,
+          risk_category: resolvedRiskCategory
+        }
       };
 
-      const res = await fetch('http://localhost:8000/api/portfolio/save', {
+      const res = await fetch(`${API_BASE_URL}/api/portfolio/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

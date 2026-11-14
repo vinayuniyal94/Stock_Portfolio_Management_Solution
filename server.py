@@ -373,6 +373,231 @@ def chat_assistant_endpoint(payload: dict):
         print(f"[Chat Assistant Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/megabull/holdings")
+def get_megabull_holdings_endpoint():
+    """Fetches holdings from MegaBull /api/holding/my and enriches with live NSE LTP & P&L."""
+    from Tools.stock_data_tool import fetch_live_stock_metrics
+
+    megabull_base_url = os.getenv("MEGABULL_BASE_URL", "https://api.megabull.in")
+    megabull_api_key = os.getenv("MEGABULL_API_KEY", "")
+    headers = {"api-key": megabull_api_key, "Content-Type": "application/json"}
+
+    try:
+        res = requests.get(f"{megabull_base_url}/api/holding/my", headers=headers, timeout=6)
+        if res.status_code == 200:
+            data = res.json()
+            holdings = data if isinstance(data, list) else data.get("holdings", [])
+
+            enriched = []
+            for h in holdings:
+                sym = str(h.get("instrumentName") or h.get("symbol") or "").upper().replace(".NS", "").strip()
+                qty = float(h.get("qty") or h.get("quantity") or 0)
+                avg_price = float(h.get("avgBuyPrice") or h.get("priceAvg") or h.get("avg_price") or 0)
+
+                # Fetch real-time NSE LTP via Indian Stock API
+                live_quote = fetch_live_stock_metrics(sym) if sym else {}
+                live_ltp = float(live_quote.get("current_price") or h.get("ltp") or avg_price)
+                pnl = round((live_ltp - avg_price) * qty, 2)
+                chg_pct = round(((live_ltp - avg_price) / avg_price) * 100, 2) if avg_price > 0 else 0.0
+
+                enriched.append({
+                    **h,
+                    "instrumentName": sym,
+                    "qty": int(qty),
+                    "avgBuyPrice": round(avg_price, 2),
+                    "ltp": round(live_ltp, 2),
+                    "pnl": pnl,
+                    "chg": chg_pct
+                })
+
+            return enriched
+    except Exception as e:
+        print(f"[MegaBull Holdings Fetch Error]: {e}")
+    return []
+
+@app.post("/api/megabull/execute-rebalance")
+def execute_megabull_rebalance_endpoint(payload: dict):
+    """Executes user-approved BUY/SELL/REBALANCE orders on MegaBull strictly during NSE/BSE market hours."""
+    from Agents.portfolio.executer_agent import execute_megabull_order
+    symbol = payload.get("symbol") or payload.get("ticker") or ""
+    action = payload.get("action", "BUY")
+    quantity = int(payload.get("quantity", 0))
+
+    if not symbol or quantity <= 0:
+        raise HTTPException(status_code=400, detail="Valid symbol and positive quantity are required.")
+
+    result = execute_megabull_order(symbol=symbol, action=action, quantity=quantity)
+    if not result.get("executed") and result.get("status") == "BLOCKED_MARKET_CLOSED":
+        raise HTTPException(status_code=403, detail=result["message"])
+    return result
+
+@app.get("/api/analytics/stock-detail/{symbol}")
+def get_stock_deep_analytics(symbol: str, period: str = "1yr"):
+    """
+    Combines live MegaBull position metrics with Indian Stock API (/stock, /historical_data,
+    /stock_forecasts) for deep individual stock inspection in Portfolio Analytics.
+    """
+    from Tools.stock_data_tool import (
+        fetch_live_stock_metrics,
+        fetch_stock_historical_data,
+        fetch_stock_forecasts
+    )
+
+    clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "").strip()
+
+    # 1. Fetch live MegaBull holding details for this specific stock
+    megabull_position = {}
+    megabull_base_url = os.getenv("MEGABULL_BASE_URL", "https://api.megabull.in")
+    megabull_api_key = os.getenv("MEGABULL_API_KEY", "")
+    if megabull_api_key:
+        try:
+            mb_res = requests.get(
+                f"{megabull_base_url}/api/holding/my",
+                headers={"api-key": megabull_api_key, "Content-Type": "application/json"},
+                timeout=5
+            )
+            if mb_res.status_code == 200:
+                raw_mb = mb_res.json()
+                items = raw_mb if isinstance(raw_mb, list) else raw_mb.get("holdings", [])
+                for item in items:
+                    item_sym = str(item.get("instrumentName") or item.get("symbol") or "").upper().replace(".NS", "").strip()
+                    if item_sym == clean_sym:
+                        megabull_position = item
+                        break
+        except Exception as e:
+            print(f"[MegaBull Stock Detail Warning]: {e}")
+
+    # 2. Fetch live quote & fundamental ratios from Indian Stock API (/stock)
+    live_metrics = fetch_live_stock_metrics(clean_sym)
+
+    # 3. Fetch historical price series (/historical_data)
+    query_name = live_metrics.get("name") or clean_sym
+    historical_raw = fetch_stock_historical_data(query_name, period=period, filter_type="price")
+
+    # Normalize historical chart points for Recharts
+    price_history = []
+    if isinstance(historical_raw, dict):
+        datasets = historical_raw.get("datasets") or []
+        if datasets and isinstance(datasets, list):
+            values = datasets[0].get("values") or []
+            for pt in values[-30:]:
+                if isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                    price_history.append({"date": str(pt[0]), "price": float(pt[1])})
+                elif isinstance(pt, dict):
+                    price_history.append({
+                        "date": str(pt.get("date") or pt.get("label") or ""),
+                        "price": float(pt.get("value") or pt.get("close") or 0)
+                    })
+
+    # 4. Fetch analyst EPS forecasts (/stock_forecasts)
+    forecasts_raw = fetch_stock_forecasts(clean_sym, measure_code="EPS")
+
+    qty = int(float(megabull_position.get("qty") or 0))
+    avg_buy = float(megabull_position.get("avgBuyPrice") or megabull_position.get("priceAvg") or 0)
+    ltp = float(live_metrics.get("current_price") or avg_buy)
+    pnl = round((ltp - avg_buy) * qty, 2) if (qty > 0 and avg_buy > 0) else 0.0
+    pnl_pct = round(((ltp - avg_buy) / avg_buy) * 100, 2) if avg_buy > 0 else 0.0
+
+    return {
+        "symbol": clean_sym,
+        "ticker": f"{clean_sym}.NS",
+        "company_name": live_metrics.get("name") or clean_sym,
+        "industry": live_metrics.get("industry") or "NSE Listed Equity",
+        "fundamentals": {
+            "ltp": ltp,
+            "pe_ratio": live_metrics.get("pe_ratio", 0.0),
+            "beta": live_metrics.get("beta", 1.0),
+            "dividend_yield": live_metrics.get("dividend_yield", 0.0)
+        },
+        "megabull_holding": {
+            "qty": qty,
+            "avg_buy_price": round(avg_buy, 2),
+            "invested_value": round(avg_buy * qty, 2),
+            "current_value": round(ltp * qty, 2),
+            "unrealized_pnl": pnl,
+            "unrealized_pnl_pct": pnl_pct,
+            "position_type": megabull_position.get("type", "LONG")
+        },
+        "price_history": price_history,
+        "forecasts": forecasts_raw if isinstance(forecasts_raw, dict) else {}
+    }
+
+
+@app.get("/api/analytics/market-outlook")
+def get_market_outlook_analytics():
+    """
+    Aggregates live Indian Stock API market pulse (/trending, /NSE_most_active)
+    to compute sector breadth, market sentiment regime, and outlook telemetry.
+    """
+    from Tools.stock_data_tool import fetch_trending_stocks, fetch_nse_most_active
+
+    trending = fetch_trending_stocks() or []
+    nse_active = fetch_nse_most_active() or []
+
+    gainers = 0
+    losers = 0
+    movers = []
+
+    for item in (trending + nse_active):
+        if not isinstance(item, dict):
+            continue
+        sym = str(item.get("nse_symbol") or item.get("symbol") or item.get("company_name") or "").strip()
+        raw_pct = item.get("percent_change") or item.get("pChange") or 0
+        try:
+            pct = round(float(str(raw_pct).replace("%", "").strip()), 2)
+        except ValueError:
+            pct = 0.0
+
+        if pct > 0:
+            gainers += 1
+        elif pct < 0:
+            losers += 1
+
+        if sym and len(movers) < 8:
+            movers.append({"name": sym, "change_pct": pct})
+
+    total = max(gainers + losers, 1)
+    bullish_ratio = round((gainers / total) * 100, 1)
+
+    if bullish_ratio >= 60:
+        regime = "Bullish Expansion"
+        stance = "Overweight growth & cyclical leaders; trail stop-losses on momentum winners."
+    elif bullish_ratio <= 40:
+        regime = "Defensive Consolidation"
+        stance = "Favor low-beta healthcare & cash-generative large caps; stagger dip entries."
+    else:
+        regime = "Range-Bound / Sector Rotation"
+        stance = "Maintain balanced core-satellite weights and rebalance overweight drift."
+
+    return {
+        "regime": regime,
+        "stance": stance,
+        "breadth": {
+            "gainers": gainers,
+            "losers": losers,
+            "bullish_ratio": bullish_ratio
+        },
+        "top_movers": movers
+    }
+
+
+@app.get("/api/analytics/stock-detail/{symbol}")
+def get_stock_deep_analytics(symbol: str, period: str = "1yr"):
+    from Tools.equity_deep_research_tool import run_equity_deep_research
+    return run_equity_deep_research(symbol=symbol, period=period)
+
+
+@app.get("/api/analytics/market-outlook")
+def get_market_outlook_analytics():
+    from Tools.equity_deep_research_tool import get_market_regime_outlook
+    return get_market_regime_outlook()
+
+
+@app.get("/api/megabull/account-overview")
+def get_megabull_account_overview_endpoint():
+    from Tools.equity_deep_research_tool import get_megabull_account_telemetry
+    return get_megabull_account_telemetry()
+
 
 @app.get("/api/health")
 def get_system_health():

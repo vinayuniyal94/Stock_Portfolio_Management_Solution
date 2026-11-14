@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from Tools.logger import log_agent_start, traceable
 from Tools.llm_tool import query_llm_with_fallback
 from Tools.stock_data_tool import fetch_stock_historical_data, fetch_stock_forecasts
+from Tools.equity_deep_research_tool import run_equity_deep_research
 from Prompts.prompt_templates import (
     STOCK_BUCKET_SYSTEM_PROMPT,
     get_stock_bucket_user_prompt
@@ -225,6 +226,8 @@ def run_stock_bucket_agent(state: dict) -> dict:
 
     final_portfolio = {
         "bucket_archetype": archetype,
+        "risk_score": risk_score,
+        "risk_category": risk_category,
         "stock_count": len(portfolio_items),
         "target_cagr": f"{round(cagr_rate * 100, 1)}%",
         "initial_capital": initial_investment,
